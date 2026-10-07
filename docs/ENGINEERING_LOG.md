@@ -76,10 +76,43 @@ Config `configs/stage1_tiny.yaml`, MPS, seed 0, torch 2.14.1:
 - generation from "mini-glm learns": reproduces the corpus — "…to predict the next token. attention lets each token…"
 - tests: 13 passed (incl. causal-mask and overfit tests)
 ### Observation
-Loss floored at ~0.05, not 0. Diagnosed as the data's irreducible uncertainty (short-context window
-starts have several plausible next chars), **not** a bug — confirmed by the causal-mask and overfit
-unit tests both passing. KV cache deliberately not added (no measured latency wall yet).
+Loss floored at ~0.05, not 0. Initially *hypothesized* as the data's irreducible uncertainty.
 ### Decision
 KEEP. Dense baseline is correct and becomes the reference point. Full write-up: `docs/reports/stage1_dense.md`.
+### Correction (added after review, see EXP-002)
+This entry originally over-claimed: it stated the loss floor *was* irreducible entropy "confirmed by
+correctness tests passing", and that RoPE was proven by the causal/overfit tests. Both were
+unproven. The causal test does not test RoPE; correctness tests do not measure data entropy. The
+artifact was also `-dirty` (not reproducible). All three are addressed in EXP-002 + ADR 0005.
 ### Next experiment
-Stage 2 — training pipeline (real tokenizer, checkpoint/resume, grad accumulation, mixed precision, packing).
+EXP-002 — evidence hardening: test the loss-floor hypothesis; prove RoPE; quantify generation/decode.
+
+---
+
+## EXP-002 — Stage 1.1: evidence hardening
+### Question
+Which Stage-1 claims are actually supported by evidence, and which were asserted? Specifically: is the
+0.05 loss floor really data entropy; is RoPE correct; what is decode (not forward) performance?
+### Baseline
+EXP-001 dense model (reproduced deterministically from the same config+seed; no checkpoint yet).
+### Hypothesis / Prediction
+Loss floor = conditional entropy at short-context positions → residual loss concentrates at positions
+0–2 and per-position CE hugs the empirical floor H(next | k chars).
+### Change
+No architecture change. Added: RoPE numerical tests; position-wise CE + empirical entropy floor;
+quantitative generation metrics; decode-latency benchmark; split memory accounting; provenance guard
+(ADR 0005). Reran EXP-001 from a clean commit.
+### Result (MPS, seed 0, reproducible=true)
+- RoPE: 4 dedicated tests pass (identity, norm-preservation, independent complex reference, relative-position). **RoPE proven.**
+- Loss floor: mean positionwise CE 0.0499; **94.1%** of residual loss in positions 0–2; mean gap to empirical floor **0.0036** nats/token. **Hypothesis accepted.**
+- Generation: teacher-forced next-token accuracy **0.9799**; 16→32-char continuation mean exact-prefix **32/32**, char acc **1.00** over 10 prompts (long free-running still drifts — not claimed exact).
+- Decode: ~200–830 tok/s vs 332k tok/s forward → pre-KV-cache baseline established.
+- Memory: params 2.64 MB · AdamW state 5.28 MB · MPS alloc 10.6 MB · process RSS 461 MB (relabeled).
+### Observation
+The dense baseline is within ~0.4% of the information-theoretic optimum for this corpus at each
+context length. Generalization and multi-seed stability remain explicitly **unproven** (deferred to Stage 2).
+### Decision
+KEEP. Stage 1 is now *scientifically* closed: claims are separated into proven / measured / unresolved.
+### Next experiment
+Stage 2 — training pipeline (real tokenizer, checkpoint/resume, grad accumulation, mixed precision,
+packing) + a genuinely disjoint validation set and a multi-seed stability check.

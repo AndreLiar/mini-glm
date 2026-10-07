@@ -1,0 +1,133 @@
+{
+  "experiment": "stage1_dense",
+  "git_commit": "5f9cbd7581525afc011e9adfeb5ba39888ffaf64",
+  "git_dirty": false,
+  "reproducible": true,
+  "config": {
+    "experiment": "stage1_dense",
+    "seed": 0,
+    "device": "auto",
+    "model": {
+      "vocab_size": 27,
+      "d_model": 128,
+      "n_layers": 4,
+      "n_heads": 4,
+      "d_ff": 256,
+      "max_seq_len": 128,
+      "rope_theta": 10000.0,
+      "attn_type": "causal",
+      "ffn_type": "dense"
+    },
+    "train": {
+      "steps": 2000,
+      "batch_size": 32,
+      "seq_len": 64,
+      "lr": 0.001,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "eval_interval": 200,
+      "eval_batches": 20
+    },
+    "data": {
+      "source": "tiny",
+      "val_fraction": 0.1
+    },
+    "toy": {
+      "input_dim": 16,
+      "output_dim": 4,
+      "n_samples": 512,
+      "noise_std": 0.05,
+      "batch_size": 32,
+      "steps": 300,
+      "lr": 0.05
+    }
+  },
+  "seed": 0,
+  "device": "mps",
+  "hardware": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "python": "3.12.8"
+  },
+  "memory": {
+    "param_bytes": 2639872,
+    "optimizer_state_bytes": 5279864,
+    "mps_current_alloc_bytes": 10608640,
+    "mps_driver_alloc_bytes": 145457152,
+    "peak_process_rss_bytes": 447053824
+  },
+  "benchmark": {
+    "type": "forward",
+    "batch_size": 32,
+    "sequence_length": 64,
+    "tokens_per_iteration": 2048,
+    "warmup_iterations": 3,
+    "measured_iterations": 20,
+    "dtype": "float32",
+    "device": "mps",
+    "tokens_per_second": 332359.639547616
+  },
+  "metrics": {
+    "total_params": 659968,
+    "vocab_size": 27,
+    "final_train_loss": 0.05185568332672119,
+    "final_val_loss": 0.05537443235516548,
+    "loss_history": [
+      {
+        "step": 0,
+        "train": 3.067620038986206,
+        "val": 3.070923328399658
+      },
+      {
+        "step": 200,
+        "train": 0.06722699105739594,
+        "val": 0.07339495420455933
+      },
+      {
+        "step": 400,
+        "train": 0.06688898056745529,
+        "val": 0.06692724674940109
+      },
+      {
+        "step": 600,
+        "train": 0.052880872040987015,
+        "val": 0.0552779920399189
+      },
+      {
+        "step": 800,
+        "train": 0.05837360769510269,
+        "val": 0.07183853536844254
+      },
+      {
+        "step": 1000,
+        "train": 0.052485160529613495,
+        "val": 0.05449589341878891
+      },
+      {
+        "step": 1200,
+        "train": 0.050580911338329315,
+        "val": 0.055740416049957275
+      },
+      {
+        "step": 1400,
+        "train": 0.04965253919363022,
+        "val": 0.05459827184677124
+      },
+      {
+        "step": 1600,
+        "train": 0.04971333593130112,
+        "val": 0.04938742518424988
+      },
+      {
+        "step": 1800,
+        "train": 0.05116664245724678,
+        "val": 0.05051512271165848
+      },
+      {
+        "step": 1999,
+        "train": 0.05185568332672119,
+        "val": 0.05537443235516548
+      }
+    ]
+  }
+}
