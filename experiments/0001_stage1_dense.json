@@ -1,0 +1,116 @@
+{
+  "experiment": "stage1_dense",
+  "git_commit": "9f0129242c028511218891ddcf444f0cd5d5c1b2-dirty",
+  "config": {
+    "experiment": "stage1_dense",
+    "seed": 0,
+    "device": "auto",
+    "model": {
+      "vocab_size": 27,
+      "d_model": 128,
+      "n_layers": 4,
+      "n_heads": 4,
+      "d_ff": 256,
+      "max_seq_len": 128,
+      "rope_theta": 10000.0,
+      "attn_type": "causal",
+      "ffn_type": "dense"
+    },
+    "train": {
+      "steps": 2000,
+      "batch_size": 32,
+      "seq_len": 64,
+      "lr": 0.001,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "eval_interval": 200,
+      "eval_batches": 20
+    },
+    "data": {
+      "source": "tiny",
+      "val_fraction": 0.1
+    },
+    "toy": {
+      "input_dim": 16,
+      "output_dim": 4,
+      "n_samples": 512,
+      "noise_std": 0.05,
+      "batch_size": 32,
+      "steps": 300,
+      "lr": 0.05
+    }
+  },
+  "seed": 0,
+  "device": "mps",
+  "hardware": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "python": "3.12.8"
+  },
+  "peak_rss_bytes": 435437568,
+  "metrics": {
+    "total_params": 659968,
+    "vocab_size": 27,
+    "throughput_tokens_per_sec": 326489.3421512733,
+    "final_train_loss": 0.04974713176488876,
+    "final_val_loss": 0.052394889295101166,
+    "loss_history": [
+      {
+        "step": 0,
+        "train": 3.067620038986206,
+        "val": 3.070923328399658
+      },
+      {
+        "step": 200,
+        "train": 0.06825751066207886,
+        "val": 0.0824241191148758
+      },
+      {
+        "step": 400,
+        "train": 0.06943001598119736,
+        "val": 0.07111481577157974
+      },
+      {
+        "step": 600,
+        "train": 0.053555674850940704,
+        "val": 0.05652918666601181
+      },
+      {
+        "step": 800,
+        "train": 0.05206040292978287,
+        "val": 0.058625929057598114
+      },
+      {
+        "step": 1000,
+        "train": 0.051771558821201324,
+        "val": 0.054468728601932526
+      },
+      {
+        "step": 1200,
+        "train": 0.050765715539455414,
+        "val": 0.05608683079481125
+      },
+      {
+        "step": 1400,
+        "train": 0.05035697668790817,
+        "val": 0.05601341649889946
+      },
+      {
+        "step": 1600,
+        "train": 0.05128401517868042,
+        "val": 0.052054453641176224
+      },
+      {
+        "step": 1800,
+        "train": 0.05108435079455376,
+        "val": 0.049852628260850906
+      },
+      {
+        "step": 1999,
+        "train": 0.04974713176488876,
+        "val": 0.052394889295101166
+      }
+    ]
+  },
+  "generation_sample": "mini-glm learns to predict the next token. attention lets each tokenionch ble. at the next toke"
+}

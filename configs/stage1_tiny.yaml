@@ -1,0 +1,25 @@
+# Stage-1 dense Transformer baseline (EXP-001). Edit this file to change the run, never the code.
+experiment: stage1_dense
+seed: 0
+device: auto
+model:
+  d_model: 128
+  n_layers: 4
+  n_heads: 4
+  d_ff: 256
+  max_seq_len: 128
+  rope_theta: 10000.0
+  attn_type: causal
+  ffn_type: dense
+train:
+  steps: 2000
+  batch_size: 32
+  seq_len: 64
+  lr: 0.001
+  weight_decay: 0.01
+  grad_clip: 1.0
+  eval_interval: 200
+  eval_batches: 20
+data:
+  source: tiny
+  val_fraction: 0.1

@@ -52,3 +52,34 @@ Plumbing works end to end: seed → data → model → optimizer → loss → st
 KEEP. Foundation is sound; no heavy framework needed (validates ADR 0001/0003).
 ### Next experiment
 EXP-001 — Stage 1 dense Transformer baseline (overfit a tiny dataset; validation loss decreases).
+
+---
+
+## EXP-001 — Stage 1: dense Transformer baseline
+### Question
+Can a from-scratch decoder-only Transformer (RMSNorm, RoPE, causal attention, SwiGLU, tied LM head)
+learn correctly — i.e. memorize a tiny corpus and reproduce it — with no silent masking/RoPE bug?
+### Baseline
+None yet; this run *establishes* the baseline that MoE (EXP-00x) and attention variants will be measured against.
+### Hypothesis
+A ~0.5–1M param dense model will drive loss from ~ln(27)≈3.3 toward ~0 on the tiny corpus and greedily
+regenerate the memorized text. Masking/RoPE correctness is verified independently by unit tests.
+### Change
+Implemented `model/{rmsnorm,rope,attention,feedforward,interfaces,transformer,generate}.py`, the tiny
+char dataset, the pretrain loop, and the benchmark harness. Backends sit behind `build_attention` /
+`build_feedforward` factories so dense FFN and causal attention remain selectable when MoE/variants arrive.
+### Result
+Config `configs/stage1_tiny.yaml`, MPS, seed 0, torch 2.14.1:
+- params: 659,968 · vocab: 27
+- train loss 3.0676 → 0.0497 · val loss 3.0709 → 0.0524
+- throughput ~326,489 tok/s (forward) · peak RSS ~435 MB
+- generation from "mini-glm learns": reproduces the corpus — "…to predict the next token. attention lets each token…"
+- tests: 13 passed (incl. causal-mask and overfit tests)
+### Observation
+Loss floored at ~0.05, not 0. Diagnosed as the data's irreducible uncertainty (short-context window
+starts have several plausible next chars), **not** a bug — confirmed by the causal-mask and overfit
+unit tests both passing. KV cache deliberately not added (no measured latency wall yet).
+### Decision
+KEEP. Dense baseline is correct and becomes the reference point. Full write-up: `docs/reports/stage1_dense.md`.
+### Next experiment
+Stage 2 — training pipeline (real tokenizer, checkpoint/resume, grad accumulation, mixed precision, packing).

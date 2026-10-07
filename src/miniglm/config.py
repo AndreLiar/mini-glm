@@ -25,10 +25,46 @@ class ToyConfig:
 
 
 @dataclass
+class ModelConfig:
+    """Dense decoder-only Transformer (Stage 1). attn_type/ffn_type are the seams for later stages."""
+
+    vocab_size: int = 256          # char-level default; overwritten at runtime from the data
+    d_model: int = 128
+    n_layers: int = 4
+    n_heads: int = 4
+    d_ff: int = 256                # SwiGLU hidden width
+    max_seq_len: int = 128
+    rope_theta: float = 10000.0
+    attn_type: str = "causal"      # Stage 4 will add "gqa", "sliding", ...
+    ffn_type: str = "dense"        # Stage 3 will add "moe"
+
+
+@dataclass
+class TrainConfig:
+    steps: int = 500
+    batch_size: int = 16
+    seq_len: int = 64
+    lr: float = 3e-4
+    weight_decay: float = 0.01
+    grad_clip: float = 1.0
+    eval_interval: int = 50
+    eval_batches: int = 20
+
+
+@dataclass
+class DataConfig:
+    source: str = "tiny"           # "tiny" = the small in-repo char corpus
+    val_fraction: float = 0.1
+
+
+@dataclass
 class Config:
     experiment: str = "unnamed"
     seed: int = 0
     device: str = "auto"  # "auto" | "mps" | "cpu" | "cuda"
+    model: ModelConfig = field(default_factory=ModelConfig)
+    train: TrainConfig = field(default_factory=TrainConfig)
+    data: DataConfig = field(default_factory=DataConfig)
     toy: ToyConfig = field(default_factory=ToyConfig)
 
     @classmethod
