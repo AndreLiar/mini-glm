@@ -9,7 +9,7 @@ import argparse
 
 from .config import Config
 from .toy import run_toy_training
-from .utils.artifacts import git_commit, hardware_info, peak_rss_bytes, write_experiment
+from .utils.artifacts import git_commit, hardware_info, peak_rss_bytes, provenance, write_experiment
 from .utils.device import resolve_device
 from .utils.logging import get_logger
 from .utils.seed import set_seed
@@ -18,53 +18,115 @@ from .utils.seed import set_seed
 def cmd_pretrain(args) -> None:
     import torch
 
-    from .benchmark import count_params, measure_throughput
-    from .model.generate import generate
+    from .benchmark import count_params, measure_throughput, memory_report
     from .train.pretrain import train_lm
 
     logger = get_logger()
     config = Config.from_yaml(args.config)
+    prov = provenance(args.allow_dirty)  # refuses a dirty tree unless --allow-dirty (ADR 0005)
     set_seed(config.seed)
     device = resolve_device(config.device)
     logger.info(f"pretrain | experiment={config.experiment} device={device} seed={config.seed}")
 
-    model, data, history = train_lm(config, device, logger)
+    model, data, history, optimizer = train_lm(config, device, logger)
 
-    # Benchmark on a full-length batch.
     bench_gen = torch.Generator().manual_seed(config.seed + 99)
     xb, _ = data.get_batch("train", config.train.batch_size, config.train.seq_len, bench_gen, device)
     throughput = measure_throughput(model, xb)
 
-    # Generation: prompt with the start of the corpus, greedily continue, show it memorized the text.
-    prompt = "mini-glm learns"
-    ctx = data.encode(prompt).unsqueeze(0).to(device)
-    out = generate(model, ctx, max_new_tokens=80, greedy=True)
-    sample = data.decode(out[0].tolist())
-
     record = {
         "experiment": config.experiment,
-        "git_commit": git_commit(),
+        **prov,
         "config": config.to_dict(),
         "seed": config.seed,
         "device": str(device),
         "hardware": hardware_info(),
-        "peak_rss_bytes": peak_rss_bytes(),
+        "memory": {**memory_report(model, optimizer, device), "peak_process_rss_bytes": peak_rss_bytes()},
+        "benchmark": {
+            "type": "forward",
+            "batch_size": config.train.batch_size,
+            "sequence_length": config.train.seq_len,
+            "tokens_per_iteration": config.train.batch_size * config.train.seq_len,
+            "warmup_iterations": 3,
+            "measured_iterations": 20,
+            "dtype": "float32",
+            "device": str(device),
+            "tokens_per_second": throughput,
+        },
         "metrics": {
             "total_params": count_params(model),
             "vocab_size": data.vocab_size,
-            "throughput_tokens_per_sec": throughput,
             "final_train_loss": history[-1]["train"],
             "final_val_loss": history[-1]["val"],
             "loss_history": history,
         },
-        "generation_sample": sample,
     }
     path = write_experiment(record)
-    logger.info(f"generation: {sample!r}")
     logger.info(
         f"DONE | params={count_params(model):,} "
         f"train={history[-1]['train']:.4f} val={history[-1]['val']:.4f} "
-        f"throughput={throughput:,.0f} tok/s -> {path}"
+        f"fwd={throughput:,.0f} tok/s reproducible={prov['reproducible']} -> {path}"
+    )
+
+
+def cmd_analyze(args) -> None:
+    """EXP-002 — evidence hardening: test the loss-floor hypothesis and quantify generation/decode."""
+    from .benchmark import measure_decode_latency, memory_report
+    from .eval.entropy import entropy_floor_by_context
+    from .eval.generation import free_running_metrics, teacher_forced_accuracy
+    from .eval.positionwise import positionwise_ce
+    from .train.pretrain import train_lm
+
+    logger = get_logger()
+    config = Config.from_yaml(args.config)
+    prov = provenance(args.allow_dirty)
+    set_seed(config.seed)
+    device = resolve_device(config.device)
+    logger.info(f"analyze | experiment={config.experiment} device={device} seed={config.seed}")
+
+    # Deterministic reproduction of the EXP-001 model (same config+seed), since we have no checkpoint yet.
+    model, data, history, optimizer = train_lm(config, device, logger)
+    ids_list = data.ids.tolist()
+    seq_len = config.train.seq_len
+
+    logger.info("measuring position-wise CE ...")
+    pos_ce = positionwise_ce(model, data.ids, seq_len, device).tolist()
+    logger.info("computing empirical conditional-entropy floor ...")
+    floor = entropy_floor_by_context(ids_list, seq_len)  # index i -> context length i+1 -> position i
+    logger.info("evaluating generation ...")
+    tf_acc = teacher_forced_accuracy(model, data.ids, seq_len, device)
+    gen = free_running_metrics(model, data, device, n_prompts=10, prompt_len=16, gen_len=32, seed=config.seed)
+    logger.info("benchmarking decode latency ...")
+    decode = measure_decode_latency(model, device, context_lengths=[8, 16, 32, 64, 96], new_tokens=32, seed=config.seed)
+
+    total_ce = sum(pos_ce)
+    residual_first3 = sum(pos_ce[:3]) / total_ce if total_ce else 0.0
+    gap_to_floor = [pos_ce[i] - floor[i] for i in range(seq_len)]
+
+    record = {
+        "experiment": f"{config.experiment}_evidence",
+        **prov,
+        "config": config.to_dict(),
+        "seed": config.seed,
+        "device": str(device),
+        "hardware": hardware_info(),
+        "memory": {**memory_report(model, optimizer, device), "peak_process_rss_bytes": peak_rss_bytes()},
+        "metrics": {
+            "final_val_loss": history[-1]["val"],
+            "mean_positionwise_ce": total_ce / seq_len,
+            "positionwise_ce": pos_ce,
+            "entropy_floor_by_position": floor,
+            "mean_gap_to_floor": sum(gap_to_floor) / seq_len,
+            "residual_fraction_first_3_positions": residual_first3,
+            "teacher_forced_next_token_accuracy": tf_acc,
+            "generation": gen,
+            "decode_latency": decode,
+        },
+    }
+    path = write_experiment(record)
+    logger.info(
+        f"DONE | tf_acc={tf_acc:.4f} mean_exact_prefix={gen['mean_exact_prefix']:.1f}/{gen['gen_len']} "
+        f"residual_in_pos0-2={residual_first3:.1%} decode@96={decode[-1]['tokens_per_sec']:.0f} tok/s -> {path}"
     )
 
 
@@ -120,7 +182,13 @@ def main() -> None:
 
     pretrain = sub.add_parser("pretrain", help="train the Stage-1 dense Transformer from a config file")
     pretrain.add_argument("--config", required=True, help="path to a YAML config in configs/")
+    pretrain.add_argument("--allow-dirty", action="store_true", help="permit a dirty git tree (exploratory, non-reproducible)")
     pretrain.set_defaults(func=cmd_pretrain)
+
+    analyze = sub.add_parser("analyze", help="EXP-002 evidence hardening: loss-floor, generation, decode")
+    analyze.add_argument("--config", required=True, help="path to a YAML config in configs/")
+    analyze.add_argument("--allow-dirty", action="store_true", help="permit a dirty git tree (exploratory, non-reproducible)")
+    analyze.set_defaults(func=cmd_analyze)
 
     args = parser.parse_args()
     args.func(args)

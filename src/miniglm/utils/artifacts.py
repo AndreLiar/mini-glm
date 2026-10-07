@@ -13,20 +13,50 @@ from pathlib import Path
 
 
 def git_commit() -> str:
-    """Return the current commit, suffixed '-dirty' if the tree has uncommitted changes."""
+    """Return the current commit hash (no dirty suffix; dirtiness is tracked separately — ADR 0005)."""
     try:
-        head = subprocess.run(
-            ["git", "rev-parse", "HEAD"], capture_output=True, text=True
-        )
+        head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True)
         if head.returncode != 0:
             return "uncommitted"
-        commit = head.stdout.strip()
-        status = subprocess.run(
-            ["git", "status", "--porcelain"], capture_output=True, text=True
-        ).stdout.strip()
-        return commit + ("-dirty" if status else "")
+        return head.stdout.strip()
     except FileNotFoundError:
         return "unknown"
+
+
+def git_is_dirty(ignore_prefixes: tuple = ("experiments/",)) -> bool | None:
+    """True/False if *source* has uncommitted changes; None if git is unavailable.
+
+    Experiment outputs (experiments/) are ignored: a canonical run writes an artifact, and that write
+    must not block the next canonical run. Provenance is about the code that produced a result.
+    """
+    try:
+        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+        if status.returncode != 0:
+            return None
+    except FileNotFoundError:
+        return None
+    for line in status.stdout.splitlines():
+        path = line[3:]
+        if "->" in path:  # rename: "old -> new"
+            path = path.split("->", 1)[1].strip()
+        if not any(path.startswith(p) for p in ignore_prefixes):
+            return True
+    return False
+
+
+def provenance(allow_dirty: bool) -> dict:
+    """Provenance block for an experiment. Canonical runs refuse a dirty tree (ADR 0005)."""
+    dirty = git_is_dirty()
+    if dirty and not allow_dirty:
+        raise RuntimeError(
+            "Canonical experiment requires a clean git tree. Commit your changes, or pass "
+            "--allow-dirty to record an exploratory (non-reproducible) run. See ADR 0005."
+        )
+    return {
+        "git_commit": git_commit(),
+        "git_dirty": bool(dirty) if dirty is not None else None,
+        "reproducible": dirty is False,
+    }
 
 
 def hardware_info() -> dict:

@@ -28,7 +28,7 @@ def estimate_loss(model, data: CharData, cfg: Config, device, generator) -> dict
 
 
 def train_lm(config: Config, device, logger):
-    """Train a dense MiniGLM on the tiny corpus. Returns (model, data, history)."""
+    """Train a dense MiniGLM on the tiny corpus. Returns (model, data, history, optimizer)."""
     data = CharData(val_fraction=config.data.val_fraction)
     config.model.vocab_size = data.vocab_size  # the data defines the vocab, not the config file
 
@@ -52,4 +52,4 @@ def train_lm(config: Config, device, logger):
             history.append({"step": step, "train": evals["train"], "val": evals["val"]})
             logger.info(f"step {step:4d} | train {evals['train']:.4f} | val {evals['val']:.4f}")
 
-    return model, data, history
+    return model, data, history, optimizer

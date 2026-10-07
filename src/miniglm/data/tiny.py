@@ -21,11 +21,13 @@ class CharData:
     """Character-level dataset with a deterministic train/val split and random contiguous batches."""
 
     def __init__(self, text: str = CORPUS, val_fraction: float = 0.1):
+        self.text = text
         chars = sorted(set(text))
         self.stoi = {c: i for i, c in enumerate(chars)}
         self.itos = {i: c for i, c in enumerate(chars)}
         self.vocab_size = len(chars)
         data = torch.tensor([self.stoi[c] for c in text], dtype=torch.long)
+        self.ids = data  # full corpus, used by position-wise / entropy analyses
         n_val = max(1, int(len(data) * val_fraction))
         self.train = data[:-n_val]
         self.val = data[-n_val:]
