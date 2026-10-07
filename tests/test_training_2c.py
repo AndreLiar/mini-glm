@@ -101,3 +101,21 @@ def test_grad_accumulation_equals_large_batch():
 
     for g_big, g_acc in zip(big, accum):
         assert torch.allclose(g_big, g_acc, atol=1e-5)
+
+
+def test_pretrain_cli_smoke(tmp_path, monkeypatch):
+    """End-to-end CLI path: catches runtime wiring bugs (imports, artifact writing) a unit test misses."""
+    import types
+
+    from miniglm.__main__ import cmd_pretrain
+
+    monkeypatch.chdir(tmp_path)  # fresh cwd (no git) -> provenance records non-reproducible, no raise
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(
+        "experiment: smoke_cli\nseed: 0\ndevice: cpu\n"
+        "model:\n  d_model: 32\n  n_layers: 1\n  n_heads: 4\n  d_ff: 64\n  max_seq_len: 32\n"
+        "train:\n  steps: 2\n  batch_size: 4\n  seq_len: 16\n  eval_interval: 1\n  eval_batches: 2\n"
+        "data:\n  source: tiny\n  val_fraction: 0.2\n"
+    )
+    cmd_pretrain(types.SimpleNamespace(config=str(cfg), allow_dirty=True, resume=None))
+    assert list((tmp_path / "experiments").glob("*.json"))
