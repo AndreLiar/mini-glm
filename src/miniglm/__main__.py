@@ -16,24 +16,39 @@ from .utils.seed import set_seed
 
 
 def cmd_pretrain(args) -> None:
+    import math
+
     import torch
 
     from .benchmark import count_params, measure_throughput, memory_report
-    from .train.pretrain import train_lm
+    from .train.checkpoint import load_checkpoint
+    from .train.pretrain import evaluate_split, train_lm
 
     logger = get_logger()
     config = Config.from_yaml(args.config)
     prov = provenance(args.allow_dirty)  # refuses a dirty tree unless --allow-dirty (ADR 0005)
     set_seed(config.seed)
     device = resolve_device(config.device)
+    ckpt_dir = f"checkpoints/{config.experiment}"
     logger.info(f"pretrain | experiment={config.experiment} device={device} seed={config.seed}")
 
-    model, data, history, optimizer = train_lm(config, device, logger)
+    model, data, history, optimizer, best = train_lm(
+        config, device, logger, resume_path=args.resume, ckpt_dir=ckpt_dir
+    )
 
     bench_gen = torch.Generator().manual_seed(config.seed + 99)
     xb, _ = data.get_batch("train", config.train.batch_size, config.train.seq_len, bench_gen, device)
     throughput = measure_throughput(model, xb)
 
+    # One-shot TEST estimate using the BEST (model-selected) checkpoint — not the final-step model.
+    # Test is consulted once here; repeated use would overfit our process to it.
+    test_loss = None
+    best_ckpt = Path(ckpt_dir) / "best.pt"
+    if hasattr(data, "test") and best_ckpt.exists():
+        load_checkpoint(best_ckpt, model, map_location=device, restore_rng=False)
+        test_loss = evaluate_split(model, data.test, config.train.seq_len, config.train.batch_size, device)
+
+    final = history[-1]
     record = {
         "experiment": config.experiment,
         **prov,
@@ -43,29 +58,31 @@ def cmd_pretrain(args) -> None:
         "hardware": hardware_info(),
         "memory": {**memory_report(model, optimizer, device), "peak_process_rss_bytes": peak_rss_bytes()},
         "benchmark": {
-            "type": "forward",
-            "batch_size": config.train.batch_size,
+            "type": "forward", "batch_size": config.train.batch_size,
             "sequence_length": config.train.seq_len,
             "tokens_per_iteration": config.train.batch_size * config.train.seq_len,
-            "warmup_iterations": 3,
-            "measured_iterations": 20,
-            "dtype": "float32",
-            "device": str(device),
-            "tokens_per_second": throughput,
+            "warmup_iterations": 3, "measured_iterations": 20, "dtype": "float32",
+            "device": str(device), "tokens_per_second": throughput,
         },
         "metrics": {
             "total_params": count_params(model),
             "vocab_size": data.vocab_size,
-            "final_train_loss": history[-1]["train"],
-            "final_val_loss": history[-1]["val"],
+            "final_train_loss": final["train"],
+            "final_val_loss": final["val"],
+            "best_val_loss": best["best_val"],          # model-selection metric
+            "best_step": best["best_step"],
+            "test_loss_at_best": test_loss,             # one-shot final generalization estimate
+            "val_perplexity_best": math.exp(best["best_val"]) if best["best_val"] < float("inf") else None,
+            "test_perplexity_at_best": math.exp(test_loss) if test_loss is not None else None,
             "loss_history": history,
         },
     }
     path = write_experiment(record)
+    test_str = f" test@best={test_loss:.4f}" if test_loss is not None else ""
     logger.info(
-        f"DONE | params={count_params(model):,} "
-        f"train={history[-1]['train']:.4f} val={history[-1]['val']:.4f} "
-        f"fwd={throughput:,.0f} tok/s reproducible={prov['reproducible']} -> {path}"
+        f"DONE | params={count_params(model):,} final_val={final['val']:.4f} "
+        f"best_val={best['best_val']:.4f}@{best['best_step']}{test_str} "
+        f"reproducible={prov['reproducible']} -> {path}"
     )
 
 
@@ -85,7 +102,7 @@ def cmd_analyze(args) -> None:
     logger.info(f"analyze | experiment={config.experiment} device={device} seed={config.seed}")
 
     # Deterministic reproduction of the EXP-001 model (same config+seed), since we have no checkpoint yet.
-    model, data, history, optimizer = train_lm(config, device, logger)
+    model, data, history, optimizer, _best = train_lm(config, device, logger)
     ids_list = data.ids.tolist()
     seq_len = config.train.seq_len
 
@@ -183,6 +200,7 @@ def main() -> None:
     pretrain = sub.add_parser("pretrain", help="train the Stage-1 dense Transformer from a config file")
     pretrain.add_argument("--config", required=True, help="path to a YAML config in configs/")
     pretrain.add_argument("--allow-dirty", action="store_true", help="permit a dirty git tree (exploratory, non-reproducible)")
+    pretrain.add_argument("--resume", default=None, help="path to a checkpoint (last.pt) to resume from")
     pretrain.set_defaults(func=cmd_pretrain)
 
     analyze = sub.add_parser("analyze", help="EXP-002 evidence hardening: loss-floor, generation, decode")

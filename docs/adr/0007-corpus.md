@@ -14,9 +14,18 @@ repo under `data/corpus/`, with the Gutenberg boilerplate header/footer stripped
 remains.
 - Primary choice: *Pride and Prejudice* (Gutenberg eBook #1342), ~700 KB of clean prose.
 - The file is committed and pinned by **sha256**; the source URL and the stripping step are recorded.
-- Target BPE vocab: **4096** (ADR 0006), fit on the **training split only** (ADR amendment: no val leakage).
-- Split: a **contiguous positional split** (train = first 90%, val = last 10% of the book). Because
-  natural prose does not repeat verbatim, the val region is genuinely unseen content.
+- Target BPE vocab: initially proposed 4096; **selected value: 1024** (see amendment below), fit on the
+  **training split only** (no val/test leakage).
+- Split: a **contiguous positional 80/10/10 split** (train / validation / **test**). Validation is used
+  for checkpoint selection and tuning; the test split is held out and consulted sparingly for a one-shot
+  final estimate. Because natural prose does not repeat verbatim, each region is genuinely unseen.
+
+## Amendment (2026-10-07) — vocab 4096 → 1024
+The executable config (`configs/stage2_book.yaml`, EXP-003 artifact) uses **vocab_size 1024**, not the
+4096 originally proposed. Reason: 1024 is ample for a single ~730 KB book, keeps the model small
+(787,584 params) and training fast on M3, and makes the token n-gram contamination check meaningful.
+Rule: *the executable configuration wins; the ADR must explain the difference* — hence this note. 4096
+remains available if a larger/ multi-book corpus later justifies it.
 
 ## Consequences
 - (+) Fully offline and reproducible: no runtime download, state recoverable from the pinned file.

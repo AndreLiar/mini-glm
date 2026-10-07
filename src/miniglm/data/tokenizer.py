@@ -4,10 +4,11 @@ Why byte-level: the base vocabulary is the 256 possible bytes, so *every* string
 `decode(encode(s)) == s` always holds — there is no out-of-vocabulary token.
 
 Why word-level pre-tokenization: the naive "merge over the whole stream" algorithm is O(merges ×
-stream length) and does not scale to a real corpus (measured wall on a 700 KB book). Like GPT-2 /
-SentencePiece, we first split text into whitespace/non-whitespace runs and run BPE *within* each run,
-counting pairs weighted by run frequency. Merges never cross a run boundary. This makes training and
-encoding tractable (unique runs ≪ characters) and is the standard design.
+stream length) and does not scale to a real corpus (measured wall on a 700 KB book). We use a standard
+pre-tokenization strategy inspired by production BPE tokenizers (e.g. GPT-2) — though NOT identical to
+GPT-2's exact regex or SentencePiece's architecture: we split text into runs of whitespace vs runs of
+non-whitespace and run BPE *within* each run, counting pairs weighted by run frequency. Merges never
+cross a run boundary. This makes training and encoding tractable (unique runs are far fewer than characters).
 
 Layout of ids:
     0..255          the 256 raw bytes

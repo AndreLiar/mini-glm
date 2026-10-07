@@ -42,7 +42,8 @@ class ModelConfig:
 @dataclass
 class TrainConfig:
     steps: int = 500
-    batch_size: int = 16
+    batch_size: int = 16          # micro-batch; effective batch = batch_size * accum_steps
+    accum_steps: int = 1          # gradient accumulation
     seq_len: int = 64
     lr: float = 3e-4
     weight_decay: float = 0.01
@@ -55,6 +56,7 @@ class TrainConfig:
 class DataConfig:
     source: str = "tiny"           # "tiny" = small in-repo char corpus; "book" = vendored BPE corpus
     val_fraction: float = 0.1
+    test_fraction: float = 0.1     # held-out test split (ADR 0007); used only for one-shot final eval
     path: str = "data/corpus/pride_and_prejudice.txt"  # used when source == "book"
     vocab_size: int = 1024         # BPE target (ADR 0006/0007); upper bound
 

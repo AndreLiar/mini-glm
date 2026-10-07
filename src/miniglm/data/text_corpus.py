@@ -36,20 +36,33 @@ def contamination(train_ids: torch.Tensor, val_ids: torch.Tensor, k: int = 13) -
 
 
 class TextCorpus:
-    def __init__(self, text: str, val_fraction: float = 0.1, vocab_size: int = 1024):
+    """Contiguous 80/10/10 train/val/test split (ADR 0007).
+
+    - train: optimize weights; also the only text the tokenizer is fit on.
+    - val:   checkpoint selection / early stopping / tuning (becomes part of model selection).
+    - test:  held out for a one-shot final estimate; consult sparingly to avoid process-overfitting.
+    """
+
+    def __init__(self, text: str, val_fraction: float = 0.1, test_fraction: float = 0.1,
+                 vocab_size: int = 1024):
         self.text = text
-        split = len(text) - int(len(text) * val_fraction)
-        self.train_text = text[:split]
-        self.val_text = text[split:]
-        # Fit the tokenizer on TRAIN ONLY — fitting on val would leak its statistics into the vocab.
+        n = len(text)
+        n_test = int(n * test_fraction)
+        n_val = int(n * val_fraction)
+        n_train = n - n_val - n_test
+        self.train_text = text[:n_train]
+        self.val_text = text[n_train : n_train + n_val]
+        self.test_text = text[n_train + n_val :]
+        # Fit the tokenizer on TRAIN ONLY — fitting on val/test would leak their statistics into the vocab.
         self.tokenizer = BPETokenizer.train(self.train_text, vocab_size=vocab_size)
         self.vocab_size = self.tokenizer.vocab_size
         self.train = torch.tensor(self.tokenizer.encode(self.train_text), dtype=torch.long)
         self.val = torch.tensor(self.tokenizer.encode(self.val_text), dtype=torch.long)
+        self.test = torch.tensor(self.tokenizer.encode(self.test_text), dtype=torch.long)
 
     @classmethod
-    def from_file(cls, path, val_fraction: float = 0.1, vocab_size: int = 1024,
-                  verify_sha256: bool = True) -> "TextCorpus":
+    def from_file(cls, path, val_fraction: float = 0.1, test_fraction: float = 0.1,
+                  vocab_size: int = 1024, verify_sha256: bool = True) -> "TextCorpus":
         path = Path(path)
         text = path.read_text(encoding="utf-8")
         if verify_sha256:
@@ -58,7 +71,7 @@ class TextCorpus:
                 expected = json.loads(manifest.read_text())["sha256"]
                 actual = hashlib.sha256(text.encode("utf-8")).hexdigest()
                 assert actual == expected, f"corpus sha256 mismatch: {actual} != {expected}"
-        return cls(text, val_fraction=val_fraction, vocab_size=vocab_size)
+        return cls(text, val_fraction=val_fraction, test_fraction=test_fraction, vocab_size=vocab_size)
 
     def get_batch(self, split: str, batch_size: int, seq_len: int, generator, device):
         source = self.train if split == "train" else self.val

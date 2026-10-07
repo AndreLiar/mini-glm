@@ -132,16 +132,26 @@ If they come out equal, that signals leakage or too-small a corpus — not succe
 Vendored *Pride and Prejudice* (ADR 0007); word-level BPE (vocab 1024, fit on train only); contiguous
 90/10 split; packing per ADR 0008. No model change (dense MiniGLM, 787,584 params with vocab 1024).
 ### Result (MPS, seed 0, reproducible=true, `experiments/0002_stage2_book.json`)
-- train 314,310 tokens · val 35,309 tokens · passage contamination 0% at k=100 (phrase-reuse only below).
+- train 314,310 tokens · val 35,309 tokens. No exact 100-token val span occurs in train (k=100
+  overlap 0%); the k=13 residual (0.68%) is phrase reuse, not passage duplication. "No passage-level
+  leakage" here means exactly: zero exact token-level overlap at k=100 (it does NOT rule out semantic
+  / near-duplicate / paraphrase overlap — not a concern within one novel, but not claimed).
 - final train loss 1.4277 (ppl 4.17) vs final val loss 2.5927 (ppl 13.37) → **gap 1.16**. Hypothesis **accepted**.
 - **Overfitting U-turn**: best val 2.3203 (ppl 10.18) at step 1250, then val *rises* to 2.59 by step 2999 while train keeps falling.
 ### Observation
-Generalization is now genuinely measured (closes the Stage-1 "unresolved" item). New finding: a ~788k
-model overfits 314k tokens of non-repetitive prose after ~1250 steps. The final-step val *overstates*
-degradation; the best-checkpoint val (step 1250) is the honest generalization estimate.
+This is the project's first credible **within-distribution generalization** measurement — generalization
+to *unseen text from the same source/domain* (same author, book, vocabulary, style), NOT broad
+language-model generalization. The hierarchy to keep straight:
+memorization → held-out same-distribution → cross-document → cross-domain → downstream/task.
+New finding: a ~788k model overfits 314k tokens of prose after ~1250 steps. **Correction:** the best-val
+checkpoint is a **model-selection** metric, not a final generalization estimate — once val is used to
+*choose* the checkpoint, val becomes part of selection and is optimistic. A separate untouched **test**
+split is needed for a one-shot final estimate (added in 2c).
 ### Decision
 KEEP. This is now the Stage-2 reference. The overfitting is a **measured need** that justifies
-best-checkpoint tracking / early stopping in 2c (capability-introduction rule fired by evidence, not preference).
+best-checkpoint tracking in 2c (capability-introduction rule fired by evidence). Early stopping is
+*separate* and deferred: with best step 1250 of 3000, ~1750 steps (58%) were wasted compute — that is
+the measured justification to add early stopping later, not now.
 ### Next experiment
 2c — checkpoint/resume + grad accumulation (now also: track & restore best val checkpoint).
 Then EXP-004 — multi-seed stability on CPU.
