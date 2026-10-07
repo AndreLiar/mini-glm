@@ -1,0 +1,35 @@
+{
+  "experiment": "stage0_toy",
+  "git_commit": "uncommitted",
+  "config": {
+    "experiment": "stage0_toy",
+    "seed": 0,
+    "device": "auto",
+    "toy": {
+      "input_dim": 16,
+      "output_dim": 4,
+      "n_samples": 512,
+      "noise_std": 0.05,
+      "batch_size": 32,
+      "steps": 300,
+      "lr": 0.05
+    }
+  },
+  "seed": 0,
+  "device": "mps",
+  "hardware": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "python": "3.12.8"
+  },
+  "peak_rss_bytes": 413515776,
+  "metrics": {
+    "first_loss": 17.46210289001465,
+    "final_loss": 0.002802917268127203,
+    "steps": 300,
+    "tokens_processed": 9600,
+    "throughput_samples_per_sec": 30361.559771798093,
+    "duration_sec": 0.3161892890930176,
+    "param_count": 68
+  }
+}

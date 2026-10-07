@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "miniglm"
+version = "0.0.0"
+description = "Mini-GLM — an educational, reproducible research platform for modern LLM architecture concepts"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.2",      # MPS (Apple Metal) backend is mature from 2.2 onward
+    "numpy>=1.26",
+    "pyyaml>=6.0",     # config files are YAML
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+# makes `miniglm <command>` available on the shell after `pip install -e .`
+miniglm = "miniglm.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
