@@ -1,0 +1,145 @@
+{
+  "experiment": "stage2_book",
+  "git_commit": "8a4262ed44c55457a6638c09a3062f82c63bc2da",
+  "git_dirty": false,
+  "reproducible": true,
+  "config": {
+    "experiment": "stage2_book",
+    "seed": 0,
+    "device": "auto",
+    "model": {
+      "vocab_size": 1024,
+      "d_model": 128,
+      "n_layers": 4,
+      "n_heads": 4,
+      "d_ff": 256,
+      "max_seq_len": 128,
+      "rope_theta": 10000.0,
+      "attn_type": "causal",
+      "ffn_type": "dense"
+    },
+    "train": {
+      "steps": 3000,
+      "batch_size": 32,
+      "seq_len": 128,
+      "lr": 0.0005,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "eval_interval": 250,
+      "eval_batches": 40
+    },
+    "data": {
+      "source": "book",
+      "val_fraction": 0.1,
+      "path": "data/corpus/pride_and_prejudice.txt",
+      "vocab_size": 1024
+    },
+    "toy": {
+      "input_dim": 16,
+      "output_dim": 4,
+      "n_samples": 512,
+      "noise_std": 0.05,
+      "batch_size": 32,
+      "steps": 300,
+      "lr": 0.05
+    }
+  },
+  "seed": 0,
+  "device": "mps",
+  "hardware": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "python": "3.12.8"
+  },
+  "memory": {
+    "param_bytes": 3150336,
+    "optimizer_state_bytes": 6300792,
+    "mps_current_alloc_bytes": 12683264,
+    "mps_driver_alloc_bytes": 1361805312,
+    "peak_process_rss_bytes": 426835968
+  },
+  "benchmark": {
+    "type": "forward",
+    "batch_size": 32,
+    "sequence_length": 128,
+    "tokens_per_iteration": 4096,
+    "warmup_iterations": 3,
+    "measured_iterations": 20,
+    "dtype": "float32",
+    "device": "mps",
+    "tokens_per_second": 335604.2961583955
+  },
+  "metrics": {
+    "total_params": 787584,
+    "vocab_size": 1024,
+    "final_train_loss": 1.4277212619781494,
+    "final_val_loss": 2.5926566123962402,
+    "loss_history": [
+      {
+        "step": 0,
+        "train": 6.487542629241943,
+        "val": 6.483707427978516
+      },
+      {
+        "step": 250,
+        "train": 3.2652347087860107,
+        "val": 3.2677814960479736
+      },
+      {
+        "step": 500,
+        "train": 2.608942985534668,
+        "val": 2.6524767875671387
+      },
+      {
+        "step": 750,
+        "train": 2.3075644969940186,
+        "val": 2.4447474479675293
+      },
+      {
+        "step": 1000,
+        "train": 2.157203197479248,
+        "val": 2.355712413787842
+      },
+      {
+        "step": 1250,
+        "train": 2.019479274749756,
+        "val": 2.320324182510376
+      },
+      {
+        "step": 1500,
+        "train": 1.9226398468017578,
+        "val": 2.3270299434661865
+      },
+      {
+        "step": 1750,
+        "train": 1.8228986263275146,
+        "val": 2.344939708709717
+      },
+      {
+        "step": 2000,
+        "train": 1.7329689264297485,
+        "val": 2.383955955505371
+      },
+      {
+        "step": 2250,
+        "train": 1.6475162506103516,
+        "val": 2.4322094917297363
+      },
+      {
+        "step": 2500,
+        "train": 1.5792871713638306,
+        "val": 2.476335287094116
+      },
+      {
+        "step": 2750,
+        "train": 1.4983289241790771,
+        "val": 2.507814407348633
+      },
+      {
+        "step": 2999,
+        "train": 1.4277212619781494,
+        "val": 2.5926566123962402
+      }
+    ]
+  }
+}

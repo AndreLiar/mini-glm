@@ -31,6 +31,8 @@ contiguous 90/10 split, fit BPE on **train only**, pack per ADR 0008.
 
 ## 2c — Training infrastructure
 Checkpoint save + **resume**, gradient accumulation, gradient clipping (already present).
+**Motivated by EXP-003:** also track and persist the **best-val checkpoint** (the overfitting U-turn
+means the final step is not the best model) — a measured need, not a preference.
 - **Checkpoint contract (enumerated):** model weights, optimizer state, step, data-iterator position,
   LR-schedule state (if any), torch/numpy RNG state, config, tokenizer reference.
 - **Acceptance:**
@@ -43,7 +45,7 @@ Checkpoint save + **resume**, gradient accumulation, gradient clipping (already 
   at ~1–3M params on M3 no memory/throughput wall has been measured, so by the capability-
   introduction rule we do not add it preemptively.
 
-## 2d — Reproducibility / stability experiment (EXP-003)
+## 2d — Reproducibility / stability experiment (EXP-004)
 Seeds 0–4, **run on CPU** (isolates seed as the only variable; avoids the MPS-nondeterminism confound).
 - Report: final val loss and perplexity (mean ± std), convergence step (first step under a preset loss
   threshold), failure rate (failure := NaN/Inf loss, or val loss above a preset bound).

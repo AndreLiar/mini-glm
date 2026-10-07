@@ -116,3 +116,32 @@ KEEP. Stage 1 is now *scientifically* closed: claims are separated into proven /
 ### Next experiment
 Stage 2 — training pipeline (real tokenizer, checkpoint/resume, grad accumulation, mixed precision,
 packing) + a genuinely disjoint validation set and a multi-seed stability check.
+
+---
+
+## EXP-003 — Stage 2b: held-out generalization on a real corpus
+### Question
+With a genuinely held-out split (not Stage-1's repeated corpus), does "val loss" finally measure
+generalization — i.e. does a real train/val gap appear?
+### Baseline
+Stage-1 memorization regime: train ≈ val (both ~0.05) because the val split overlapped train content.
+### Hypothesis / Prediction (pre-registered)
+On a disjoint split of non-repetitive prose, val loss should exceed train loss by a measurable gap.
+If they come out equal, that signals leakage or too-small a corpus — not success.
+### Change
+Vendored *Pride and Prejudice* (ADR 0007); word-level BPE (vocab 1024, fit on train only); contiguous
+90/10 split; packing per ADR 0008. No model change (dense MiniGLM, 787,584 params with vocab 1024).
+### Result (MPS, seed 0, reproducible=true, `experiments/0002_stage2_book.json`)
+- train 314,310 tokens · val 35,309 tokens · passage contamination 0% at k=100 (phrase-reuse only below).
+- final train loss 1.4277 (ppl 4.17) vs final val loss 2.5927 (ppl 13.37) → **gap 1.16**. Hypothesis **accepted**.
+- **Overfitting U-turn**: best val 2.3203 (ppl 10.18) at step 1250, then val *rises* to 2.59 by step 2999 while train keeps falling.
+### Observation
+Generalization is now genuinely measured (closes the Stage-1 "unresolved" item). New finding: a ~788k
+model overfits 314k tokens of non-repetitive prose after ~1250 steps. The final-step val *overstates*
+degradation; the best-checkpoint val (step 1250) is the honest generalization estimate.
+### Decision
+KEEP. This is now the Stage-2 reference. The overfitting is a **measured need** that justifies
+best-checkpoint tracking / early stopping in 2c (capability-introduction rule fired by evidence, not preference).
+### Next experiment
+2c — checkpoint/resume + grad accumulation (now also: track & restore best val checkpoint).
+Then EXP-004 — multi-seed stability on CPU.
