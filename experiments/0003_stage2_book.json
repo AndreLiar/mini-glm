@@ -1,0 +1,152 @@
+{
+  "experiment": "stage2_book",
+  "git_commit": "23f462b7a33d675c0ddc058db6f35389c1cdf971",
+  "git_dirty": false,
+  "reproducible": true,
+  "config": {
+    "experiment": "stage2_book",
+    "seed": 0,
+    "device": "auto",
+    "model": {
+      "vocab_size": 1024,
+      "d_model": 128,
+      "n_layers": 4,
+      "n_heads": 4,
+      "d_ff": 256,
+      "max_seq_len": 128,
+      "rope_theta": 10000.0,
+      "attn_type": "causal",
+      "ffn_type": "dense"
+    },
+    "train": {
+      "steps": 3000,
+      "batch_size": 32,
+      "accum_steps": 1,
+      "seq_len": 128,
+      "lr": 0.0005,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "eval_interval": 250,
+      "eval_batches": 40
+    },
+    "data": {
+      "source": "book",
+      "val_fraction": 0.1,
+      "test_fraction": 0.1,
+      "path": "data/corpus/pride_and_prejudice.txt",
+      "vocab_size": 1024
+    },
+    "toy": {
+      "input_dim": 16,
+      "output_dim": 4,
+      "n_samples": 512,
+      "noise_std": 0.05,
+      "batch_size": 32,
+      "steps": 300,
+      "lr": 0.05
+    }
+  },
+  "seed": 0,
+  "device": "mps",
+  "hardware": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "python": "3.12.8"
+  },
+  "memory": {
+    "param_bytes": 3150336,
+    "optimizer_state_bytes": 6300792,
+    "mps_current_alloc_bytes": 12683264,
+    "mps_driver_alloc_bytes": 1386987520,
+    "peak_process_rss_bytes": 459046912
+  },
+  "benchmark": {
+    "type": "forward",
+    "batch_size": 32,
+    "sequence_length": 128,
+    "tokens_per_iteration": 4096,
+    "warmup_iterations": 3,
+    "measured_iterations": 20,
+    "dtype": "float32",
+    "device": "mps",
+    "tokens_per_second": 344705.9580410601
+  },
+  "metrics": {
+    "total_params": 787584,
+    "vocab_size": 1024,
+    "final_train_loss": 0.8983255013823509,
+    "final_val_loss": 3.4127925036154387,
+    "best_val_loss": 2.4061934511303464,
+    "best_step": 1000,
+    "test_loss_at_best": 2.3785673811815786,
+    "val_perplexity_best": 11.091659740114668,
+    "test_perplexity_at_best": 10.789434639437502,
+    "loss_history": [
+      {
+        "step": 0,
+        "train": 6.4914775609970095,
+        "val": 6.485559159582788
+      },
+      {
+        "step": 250,
+        "train": 3.285898858308792,
+        "val": 3.2802765666346847
+      },
+      {
+        "step": 500,
+        "train": 2.561200773715973,
+        "val": 2.655051349283575
+      },
+      {
+        "step": 750,
+        "train": 2.251961374282837,
+        "val": 2.4544373606587504
+      },
+      {
+        "step": 1000,
+        "train": 2.039216324687004,
+        "val": 2.4061934511303464
+      },
+      {
+        "step": 1250,
+        "train": 1.872892102599144,
+        "val": 2.416139453322023
+      },
+      {
+        "step": 1500,
+        "train": 1.7048788219690323,
+        "val": 2.4880050215528997
+      },
+      {
+        "step": 1750,
+        "train": 1.5423529475927353,
+        "val": 2.600759180474194
+      },
+      {
+        "step": 2000,
+        "train": 1.3985040456056594,
+        "val": 2.724917078192854
+      },
+      {
+        "step": 2250,
+        "train": 1.248834216594696,
+        "val": 2.8844044514191456
+      },
+      {
+        "step": 2500,
+        "train": 1.122146424651146,
+        "val": 3.06746887025379
+      },
+      {
+        "step": 2750,
+        "train": 1.0042732417583466,
+        "val": 3.2237666937021108
+      },
+      {
+        "step": 2999,
+        "train": 0.8983255013823509,
+        "val": 3.4127925036154387
+      }
+    ]
+  }
+}

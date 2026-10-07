@@ -154,4 +154,30 @@ best-checkpoint tracking in 2c (capability-introduction rule fired by evidence).
 the measured justification to add early stopping later, not now.
 ### Next experiment
 2c — checkpoint/resume + grad accumulation (now also: track & restore best val checkpoint).
-Then EXP-004 — multi-seed stability on CPU.
+
+---
+
+## EXP-004 — Stage 2c: train/val/test discipline + resumable pipeline reference run
+### Question
+With best-val checkpoint selection and a proper held-out test split, does the test estimate confirm
+val as a selection metric — and is resume/accumulation correct?
+### Baseline
+EXP-003 (90/10 split, random-window sampling, no checkpointing).
+### Change
+80/10/10 train/val/test split; resumable PackedLoader (real packed iteration, not random windows);
+checkpoint/resume with full state; best-val checkpointing; gradient accumulation. No model change.
+### Result (MPS, seed 0, reproducible=true, `experiments/0003_stage2_book.json`; 33 tests incl. bit-exact resume + grad-accum==large-batch)
+- best val 2.4062 (ppl 11.1) @ step 1000 — model-selection metric.
+- **test @ best 2.3786 (ppl 10.8)** — one-shot, never used for selection.
+- final val 3.4128 (ppl 30.3) — heavy overfitting by step 3000 (train 0.898 / ppl 2.45).
+### Observation
+test (10.8) ≈ val (11.1): in this single selection, val was an essentially unbiased estimator — now
+*verified* against untouched test rather than assumed. Overfitting peaks earlier than EXP-003 (step
+1000 vs 1250) because the train split is smaller (80% vs 90%). Resume is bit-exact on CPU and
+grad-accumulation equals a large batch (atol 1e-5) — the state contract is complete.
+Caveat: test was consulted once here; each future look risks process-overfitting, so it stays untouched
+during development.
+### Decision
+KEEP as the Stage-2 reference. Pipeline is reproducible, resumable, and selection-honest.
+### Next experiment
+EXP-005 — multi-seed stability on CPU (seeds 0–4; mean ± std; defined failure/convergence).

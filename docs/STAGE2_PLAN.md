@@ -45,7 +45,7 @@ means the final step is not the best model) — a measured need, not a preferenc
   at ~1–3M params on M3 no memory/throughput wall has been measured, so by the capability-
   introduction rule we do not add it preemptively.
 
-## 2d — Reproducibility / stability experiment (EXP-004)
+## 2d — Reproducibility / stability experiment (EXP-005)
 Seeds 0–4, **run on CPU** (isolates seed as the only variable; avoids the MPS-nondeterminism confound).
 - Report: final val loss and perplexity (mean ± std), convergence step (first step under a preset loss
   threshold), failure rate (failure := NaN/Inf loss, or val loss above a preset bound).
