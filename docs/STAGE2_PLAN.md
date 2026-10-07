@@ -1,50 +1,67 @@
-# Stage 2 Plan — Training Pipeline
+# Stage 2 Plan — Training Pipeline (revised after senior review)
 
-Goal: turn the Stage-1 toy into a reproducible training pipeline, and close the two gaps the Stage-1
-review left **unresolved** (generalization, multi-seed stability). No new *model* architecture.
+Goal: turn the Stage-1 toy into a reproducible training pipeline and close the two items the Stage-1
+review left **unresolved** — generalization and multi-seed stability. No new *model* architecture.
 
-Broken into sub-milestones, each with its own falsifiable acceptance tests (Stage-1 lesson). We build
-and review one at a time rather than dropping the whole stage at once.
+This revision follows a self-review that found the first draft under-specified the contentious
+decisions (corpus, leakage, packing). Those are now fixed in ADRs **0006** (tokenizer), **0007**
+(corpus), **0008** (packing/attention/masking) — decided up front so the build is mechanical.
 
-## 2a — Tokenizer  *(building now)*
-Byte-level BPE from scratch (ADR 0006): train, encode, decode, save/load.
+Each sub-milestone has falsifiable acceptance tests. We build and review one at a time.
+
+## 2a — Tokenizer ✅ (done)
+Byte-level BPE (ADR 0006). 6 tests pass. **Amendment:** in 2b it is fit on the **train split only**.
+
+## 2b — Data pipeline + honest validation (next)
+Vendor the corpus (ADR 0007: *Pride and Prejudice* #1342, boilerplate stripped, sha256-pinned),
+contiguous 90/10 split, fit BPE on **train only**, pack per ADR 0008.
 - **Acceptance (tests that can fail):**
-  - round-trip `decode(encode(s)) == s` for ASCII, Unicode, and emoji (byte-level guarantee)
-  - training is deterministic (same corpus → identical merges)
-  - trained vocab size == requested size
-  - merges never increase encoded length vs raw bytes
-
-## 2b — Data pipeline + honest validation split
-Tokenize a small real corpus; build a **genuinely disjoint** train/val split (separate documents, no
-content overlap — this is what EXP-002 flagged as missing); sequence packing (concatenate with
-document separators, chunk to `seq_len`).
-- **Acceptance:**
-  - zero n-gram overlap between train and val above a threshold (proves disjointness)
-  - packing invariants: every chunk is exactly `seq_len`; no token lost or duplicated
+  - tokenizer is fit without seeing any val token (leakage guard)
+  - **contamination check:** fraction of val 13-grams occurring verbatim in train is < 0.1%
+  - packing invariant (ADR 0008): order preserved; every chunk == `seq_len`; dropped tail == `len(stream) % seq_len`
+  - vendored corpus matches its pinned sha256
   - deterministic given seed
+- **Pre-registered experiment (the scientific point):** with a genuinely held-out split, we **predict
+  val loss > train loss** by a measurable gap (unlike Stage 1, where they were equal). If they come
+  out equal, that is evidence of leakage or too-small a corpus — **not** success.
 
 ## 2c — Training infrastructure
-Checkpoint save + **resume-from-checkpoint** (model + optimizer + step + RNG state); gradient
-accumulation; gradient clipping (already present); mixed precision where MPS supports it.
+Checkpoint save + **resume**, gradient accumulation, gradient clipping (already present).
+- **Checkpoint contract (enumerated):** model weights, optimizer state, step, data-iterator position,
+  LR-schedule state (if any), torch/numpy RNG state, config, tokenizer reference.
 - **Acceptance:**
-  - resume produces the *same* trajectory as an uninterrupted run (asserted on CPU for determinism)
-  - a checkpoint reloads to identical weights
-  - grad-accumulation of N micro-batches ≈ one batch of N× size (within tolerance)
-  - mixed precision is a *measured* KEEP/REVERT vs fp32 (speed + memory + loss), not assumed
+  - resume reproduces the uninterrupted trajectory **bit-exactly on CPU** (incl. a test that perturbs
+    only the data-order path, to catch the classic "iterator position not restored" bug)
+  - a checkpoint reloads to identical weights (`allclose`)
+  - grad-accumulation of N micro-batches == one N×-batch on CPU fp32, dropout=0, **atol 1e-5**
+    (explicitly exercises the loss-normalization path)
+- **Mixed precision is NOT included here.** It is deferred to a measured side-experiment (see 2f):
+  at ~1–3M params on M3 no memory/throughput wall has been measured, so by the capability-
+  introduction rule we do not add it preemptively.
 
 ## 2d — Reproducibility / stability experiment (EXP-003)
-Run seeds 0–4; report final val loss mean ± std, convergence step, failure rate. Closes the
-multi-seed gap. Decide whether "training is stable" is now a supportable claim.
+Seeds 0–4, **run on CPU** (isolates seed as the only variable; avoids the MPS-nondeterminism confound).
+- Report: final val loss and perplexity (mean ± std), convergence step (first step under a preset loss
+  threshold), failure rate (failure := NaN/Inf loss, or val loss above a preset bound).
+- n=5 is labeled **indicative**, not rigorous. Decide whether "training is stable" is now supportable.
 
 ## 2e — Benchmarks
-Throughput + peak memory with the real pipeline; record self-describing benchmark blocks so Stage 3
-(MoE) comparisons are apples-to-apples.
+Throughput + peak memory with the real pipeline, self-describing blocks (reuse Stage-1 format).
+- **Note:** a real vocab (4096) changes embedding/LM-head size, so this model is **not** the 660k
+  Stage-1 model. Flag the param count so Stage 3's MoE-vs-dense comparison controls for it.
+- Report **perplexity** (= exp(val loss)) on the disjoint val set as the standard LM metric.
+
+## 2f — Mixed precision (measured side-experiment, likely REVERT)
+Only if 2e shows a memory/throughput problem worth solving. Run AMP vs fp32 and measure speed, peak
+memory, and loss delta; verify AMP actually changed dtypes (guard against silent fp32). **Pre-
+registered expectation: REVERT at this scale.** Documenting that reasoning is the deliverable.
 
 ## Stage-2 gate (Definition of Done)
-- training reproducible (code provenance clean; CPU bit-reproducible; MPS documented)
-- interrupted training resumes correctly
+- training reproducible (clean provenance; CPU bit-reproducible; MPS nondeterminism documented)
+- interrupted training resumes correctly (data-order included)
 - checkpoints load correctly
-- dataset pipeline has a deterministic, *disjoint* validation set
-- throughput + peak memory benchmarked
-- EXP-003 multi-seed stability reported with mean ± std
-- claims sorted proven / measured / unresolved
+- dataset pipeline has a deterministic, **contamination-checked** held-out val set
+- throughput + peak memory + perplexity benchmarked; param count flagged as non-comparable to Stage 1
+- EXP-003 multi-seed stability reported with mean ± std and defined failure/convergence
+- mixed precision decided on **measurement**, not assumption
+- every claim sorted proven / measured / unresolved
