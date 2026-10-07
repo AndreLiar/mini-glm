@@ -9,7 +9,17 @@ import torch
 
 from ..config import Config
 from ..data.tiny import CharData
+from ..data.text_corpus import TextCorpus
 from ..model.transformer import MiniGLM
+
+
+def build_data(config: Config):
+    """Select the dataset by config. 'book' uses the vendored BPE corpus (ADR 0007)."""
+    if config.data.source == "book":
+        return TextCorpus.from_file(
+            config.data.path, val_fraction=config.data.val_fraction, vocab_size=config.data.vocab_size
+        )
+    return CharData(val_fraction=config.data.val_fraction)
 
 
 @torch.no_grad()
@@ -29,7 +39,7 @@ def estimate_loss(model, data: CharData, cfg: Config, device, generator) -> dict
 
 def train_lm(config: Config, device, logger):
     """Train a dense MiniGLM on the tiny corpus. Returns (model, data, history, optimizer)."""
-    data = CharData(val_fraction=config.data.val_fraction)
+    data = build_data(config)
     config.model.vocab_size = data.vocab_size  # the data defines the vocab, not the config file
 
     model = MiniGLM(config.model).to(device)

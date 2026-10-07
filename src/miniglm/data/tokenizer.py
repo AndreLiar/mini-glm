@@ -1,9 +1,13 @@
 """Byte-level Byte-Pair Encoding (BPE) tokenizer, from scratch (ADR 0006).
 
 Why byte-level: the base vocabulary is the 256 possible bytes, so *every* string is encodable and
-`decode(encode(s)) == s` always holds — there is no out-of-vocabulary token. Training then learns
-"merges": repeatedly fuse the most frequent adjacent pair into a new token, growing the vocab up to a
-target size. Encoding replays those merges in the order they were learned.
+`decode(encode(s)) == s` always holds — there is no out-of-vocabulary token.
+
+Why word-level pre-tokenization: the naive "merge over the whole stream" algorithm is O(merges ×
+stream length) and does not scale to a real corpus (measured wall on a 700 KB book). Like GPT-2 /
+SentencePiece, we first split text into whitespace/non-whitespace runs and run BPE *within* each run,
+counting pairs weighted by run frequency. Merges never cross a run boundary. This makes training and
+encoding tractable (unique runs ≪ characters) and is the standard design.
 
 Layout of ids:
     0..255          the 256 raw bytes
@@ -12,16 +16,12 @@ Layout of ids:
 """
 
 import json
+import re
+from collections import Counter
 from pathlib import Path
 
 DEFAULT_SPECIALS = ["<pad>", "<bos>", "<eos>"]
-
-
-def _count_pairs(ids: list[int]) -> dict[tuple[int, int], int]:
-    counts: dict[tuple[int, int], int] = {}
-    for a, b in zip(ids, ids[1:]):
-        counts[(a, b)] = counts.get((a, b), 0) + 1
-    return counts
+_PRETOKEN = re.compile(r"\s+|\S+")  # partitions text losslessly: concat of matches == original
 
 
 def _merge(ids: list[int], pair: tuple[int, int], new_id: int) -> list[int]:
@@ -41,10 +41,10 @@ class BPETokenizer:
         self.merges = merges
         self.specials = specials
         self.special_to_id = {tok: 256 + i for i, tok in enumerate(specials)}
-        # id -> bytes table for decoding
         self.vocab = {i: bytes([i]) for i in range(256)}
         for (a, b), idx in merges.items():
             self.vocab[idx] = self.vocab[a] + self.vocab[b]
+        self._cache: dict[str, list[int]] = {}
 
     @property
     def vocab_size(self) -> int:
@@ -54,48 +54,56 @@ class BPETokenizer:
     def train(cls, text: str, vocab_size: int, specials: list[str] = DEFAULT_SPECIALS) -> "BPETokenizer":
         assert vocab_size >= 256 + len(specials), "vocab_size too small for bytes + specials"
         num_merges = vocab_size - 256 - len(specials)
-        ids = list(text.encode("utf-8"))
+        freqs = Counter(_PRETOKEN.findall(text))
+        splits = {run: list(run.encode("utf-8")) for run in freqs}
         merges: dict[tuple[int, int], int] = {}
         next_id = 256 + len(specials)
         for _ in range(num_merges):
-            counts = _count_pairs(ids)
-            if not counts:
-                break  # corpus exhausted: vocab_size is an upper bound, actual vocab may be smaller
-            # most frequent pair; ties broken deterministically by first occurrence (dict order)
-            pair = max(counts, key=lambda p: (counts[p], -p[0], -p[1]))
+            pair_counts: dict[tuple[int, int], int] = {}
+            for run, f in freqs.items():
+                ids = splits[run]
+                for a, b in zip(ids, ids[1:]):
+                    pair_counts[(a, b)] = pair_counts.get((a, b), 0) + f
+            if not pair_counts:
+                break  # corpus exhausted: vocab_size is an upper bound
+            pair = max(pair_counts, key=lambda p: (pair_counts[p], -p[0], -p[1]))
             merges[pair] = next_id
-            ids = _merge(ids, pair, next_id)
+            for run in splits:
+                splits[run] = _merge(splits[run], pair, next_id)
             next_id += 1
         return cls(merges, specials)
 
-    def encode(self, text: str) -> list[int]:
-        ids = list(text.encode("utf-8"))
+    def _encode_run(self, run: str) -> list[int]:
+        cached = self._cache.get(run)
+        if cached is not None:
+            return cached
+        ids = list(run.encode("utf-8"))
         while len(ids) >= 2:
-            counts = _count_pairs(ids)
-            # apply the merge that was learned earliest (lowest new id) among present pairs
-            candidates = [p for p in counts if p in self.merges]
-            if not candidates:
+            present = {p for p in zip(ids, ids[1:]) if p in self.merges}
+            if not present:
                 break
-            pair = min(candidates, key=lambda p: self.merges[p])
+            pair = min(present, key=lambda p: self.merges[p])  # apply earliest-learned merge first
             ids = _merge(ids, pair, self.merges[pair])
+        self._cache[run] = ids
         return ids
+
+    def encode(self, text: str) -> list[int]:
+        out: list[int] = []
+        for run in _PRETOKEN.findall(text):
+            out.extend(self._encode_run(run))
+        return out
 
     def decode(self, ids: list[int]) -> str:
         special_ids = set(self.special_to_id.values())
-        parts = [self.vocab[i] for i in ids if i not in special_ids]
-        return b"".join(parts).decode("utf-8", errors="replace")
+        return b"".join(self.vocab[i] for i in ids if i not in special_ids).decode("utf-8", errors="replace")
 
     def save(self, path: str | Path) -> None:
-        payload = {
-            "specials": self.specials,
-            "merges": [[a, b, idx] for (a, b), idx in self.merges.items()],
-        }
         with open(path, "w") as f:
-            json.dump(payload, f)
+            json.dump({"specials": self.specials,
+                       "merges": [[a, b, idx] for (a, b), idx in self.merges.items()]}, f)
 
     @classmethod
     def load(cls, path: str | Path) -> "BPETokenizer":
         with open(path, "r") as f:
             payload = json.load(f)
-        merges = {(a, b): idx for a, b, idx in payload["merges"]}
-        return cls(merges, payload["specials"])
+        return cls({(a, b): idx for a, b, idx in payload["merges"]}, payload["specials"])

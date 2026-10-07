@@ -19,8 +19,10 @@ concatenation boundaries, and whether padding + loss-masking are needed.
 
 ## Consequences
 - (+) Removes an entire bug class (no pad handling, no loss-mask correctness, no doc-mask kernel).
-- (+) Corrected, testable invariant: *the packed stream preserves token order; every emitted chunk is
-  exactly `seq_len`; exactly `len(stream) mod seq_len` tokens are dropped from the tail.*
+- (+) Corrected, testable invariant: for next-token prediction we form `N = (len(stream) - 1) //
+  seq_len` input chunks of exactly `seq_len`, with targets shifted by one (`y[i,j] =
+  stream[i*seq_len + j + 1]`); token order is preserved and the tail of `len(stream) - (N*seq_len+1)`
+  tokens is dropped.
 - (−) A negligible tail fraction of tokens is unused per epoch (documented, not hidden).
 - (−) Cross-boundary attention lets a chunk attend across a boundary; at our scale this is standard
   practice with no measured downside. If a future measurement shows harm, revisit with a doc mask.

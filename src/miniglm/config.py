@@ -53,8 +53,10 @@ class TrainConfig:
 
 @dataclass
 class DataConfig:
-    source: str = "tiny"           # "tiny" = the small in-repo char corpus
+    source: str = "tiny"           # "tiny" = small in-repo char corpus; "book" = vendored BPE corpus
     val_fraction: float = 0.1
+    path: str = "data/corpus/pride_and_prejudice.txt"  # used when source == "book"
+    vocab_size: int = 1024         # BPE target (ADR 0006/0007); upper bound
 
 
 @dataclass

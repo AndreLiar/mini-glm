@@ -1,0 +1,27 @@
+# Stage-2 training on the vendored book (ADR 0007). Edit this file, not the code.
+experiment: stage2_book
+seed: 0
+device: auto
+model:
+  d_model: 128
+  n_layers: 4
+  n_heads: 4
+  d_ff: 256
+  max_seq_len: 128
+  rope_theta: 10000.0
+  attn_type: causal
+  ffn_type: dense
+train:
+  steps: 3000
+  batch_size: 32
+  seq_len: 128
+  lr: 0.0005
+  weight_decay: 0.01
+  grad_clip: 1.0
+  eval_interval: 250
+  eval_batches: 40
+data:
+  source: book
+  path: data/corpus/pride_and_prejudice.txt
+  val_fraction: 0.1
+  vocab_size: 1024
