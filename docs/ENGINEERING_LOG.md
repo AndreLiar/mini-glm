@@ -200,11 +200,24 @@ nondeterminism confounding seed variance).
 - **Failure** := any non-finite (NaN/Inf) val loss, OR best val loss > 4.0 (clearly failed to learn).
 - Report per seed: best val, best step, convergence step. Aggregate: mean / std / min / max of best
   val; mean convergence step; failure rate. Steps capped at 1500 because EXP-004's best val was @1000.
-### Result
-_pending — background CPU run_
+### Result (CPU, seeds 0–4, reproducible=true, `experiments/0004_stage2_stability.json`; ~2.7 min/seed, ~13.5 min total)
+| seed | best val | best step | convergence step |
+|---|---|---|---|
+| 0 | 2.4033 | 1100 | 500 |
+| 1 | 2.3903 | 1000 | 500 |
+| 2 | 2.3807 | 1100 | 500 |
+| 3 | 2.3892 | 1100 | 500 |
+| 4 | 2.4002 | 1100 | 500 |
+
+Aggregate: **best val 2.3927 ± 0.0091** (min 2.3807, max 2.4033, spread 0.0226; ppl 10.94 ± ~0.10).
+Convergence step **500 for every seed**. **Failure rate 0%.**
 ### Observation
-_pending_
+The experimental system is highly stable: seed-only variability (CPU, so no MPS confound) is σ ≈ 0.009
+nats/token and convergence timing is identical across seeds. This σ is the **noise floor**.
 ### Decision
-_pending_
+KEEP; "training is stable" is now a **supported** claim (n=5, labeled indicative). **Rule for Stage 3+:**
+no architecture change may be called an improvement unless its val-loss delta clearly exceeds this
+noise — as a guide, Δ ≳ 2–3σ (~0.02–0.03 nats) AND ideally confirmed with its own multi-seed run.
+A +0.04 MoE "win" over a 2.39 ± 0.009 baseline would be real; a +0.01 "win" would be noise.
 ### Next experiment
 Stage 2e benchmarks + perplexity; then Stage 3 (MoE) measured against this noise floor.

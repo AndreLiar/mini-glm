@@ -40,3 +40,4 @@ Dev machine: **Apple MacBook Air M3, 16 GB unified memory, no fan (passive cooli
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | EXP-004 | 787,584 | 787,584 | 128 | 32 | fp32 | MPS | ~11 MB alloc | ~0.46 GB | ~335k | ~52 ms (MPS) | OK |
 | EXP-004 | 787,584 | 787,584 | 128 | 32 | fp32 | CPU | — | — | — | ~95 ms | OK |
+| EXP-005 | 787,584 | 787,584 | 128 | 32 | fp32 | CPU | — | — | — | ~110 ms | OK (5 seeds, ~2.7 min/seed, ~13.5 min total; no throttling concern at this duration) |
