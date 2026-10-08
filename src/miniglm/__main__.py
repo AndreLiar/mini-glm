@@ -187,6 +187,107 @@ def cmd_train(args) -> None:
     )
 
 
+def cmd_amp(args) -> None:
+    """EXP-006 — mixed precision as a MEASURED side-experiment (expected REVERT at this scale).
+
+    Compares fp32 vs fp16 autocast on throughput, memory, stability, and verifies the compute dtype
+    actually changed (guards against silently running fp32). No GradScaler (MPS AMP is not turnkey —
+    itself part of the finding); the loss column is a short-run stability check, not a controlled match.
+    """
+    import math
+    import time
+    from contextlib import nullcontext
+
+    import torch
+
+    from .data.loader import PackedLoader
+    from .model.transformer import MiniGLM
+    from .train.pretrain import build_data, evaluate_split
+
+    MEASURE_ITERS, WARMUP, TRAIN_STEPS = 20, 3, 200
+    logger = get_logger()
+    config = Config.from_yaml(args.config)
+    prov = provenance(args.allow_dirty)
+    set_seed(config.seed)
+    device = resolve_device(config.device)
+    data = build_data(config)
+    config.model.vocab_size = data.vocab_size
+    tcfg = config.train
+    logger.info(f"amp | device={device} comparing fp32 vs fp16 autocast")
+
+    def amp_ctx(enabled):
+        if not enabled:
+            return nullcontext()
+        dtype = torch.bfloat16 if device.type == "cpu" else torch.float16
+        return torch.autocast(device_type=device.type, dtype=dtype)
+
+    def sync():
+        if device.type == "mps":
+            torch.mps.synchronize()
+        elif device.type == "cuda":
+            torch.cuda.synchronize()
+
+    results = {}
+    for mode, enabled in [("fp32", False), ("amp_fp16", True)]:
+        try:
+            set_seed(config.seed)
+            model = MiniGLM(config.model).to(device)
+            opt = torch.optim.AdamW(model.parameters(), lr=tcfg.lr, weight_decay=tcfg.weight_decay)
+            loader = PackedLoader(data.train, tcfg.seq_len, tcfg.batch_size, seed=config.seed + 1)
+
+            xb, _ = loader.next_batch(device)
+            with torch.no_grad(), amp_ctx(enabled):
+                logits, _ = model(xb)
+            logits_dtype = str(logits.dtype)
+
+            def step():
+                xb, yb = loader.next_batch(device)
+                opt.zero_grad(set_to_none=True)
+                with amp_ctx(enabled):
+                    _, loss = model(xb, yb)
+                loss.backward()
+                opt.step()
+
+            for _ in range(WARMUP):
+                step()
+            sync()
+            t0 = time.time()
+            for _ in range(MEASURE_ITERS):
+                step()
+            sync()
+            tok_s = MEASURE_ITERS * tcfg.batch_size * tcfg.seq_len / (time.time() - t0)
+
+            for _ in range(TRAIN_STEPS):
+                step()
+            val = evaluate_split(model, data.val, tcfg.seq_len, tcfg.batch_size, device, max_batches=10)
+            mem = int(torch.mps.driver_allocated_memory()) if device.type == "mps" else None
+            results[mode] = {"tokens_per_sec": tok_s, "logits_dtype": logits_dtype,
+                             "val_loss_short": val, "finite": math.isfinite(val), "driver_mem_bytes": mem}
+            logger.info(f"{mode}: {tok_s:,.0f} tok/s | logits {logits_dtype} | val~{val:.4f} | mem {mem}")
+        except Exception as e:  # MPS AMP op-coverage gaps are a legitimate finding
+            results[mode] = {"error": f"{type(e).__name__}: {e}"}
+            logger.info(f"{mode}: ERROR {type(e).__name__}: {e}")
+
+    speedup = None
+    dtype_changed = None
+    if "tokens_per_sec" in results.get("fp32", {}) and "tokens_per_sec" in results.get("amp_fp16", {}):
+        speedup = results["amp_fp16"]["tokens_per_sec"] / results["fp32"]["tokens_per_sec"]
+        dtype_changed = results["amp_fp16"]["logits_dtype"] != results["fp32"]["logits_dtype"]
+
+    record = {
+        "experiment": "stage2_amp",
+        **prov,
+        "config": config.to_dict(),
+        "device": str(device),
+        "hardware": hardware_info(),
+        "results": results,
+        "speedup_amp_over_fp32": speedup,
+        "amp_dtype_changed": dtype_changed,
+    }
+    path = write_experiment(record)
+    logger.info(f"DONE | speedup={speedup} dtype_changed={dtype_changed} -> {path}")
+
+
 def cmd_stability(args) -> None:
     """EXP-005 — multi-seed stability on CPU. Pre-registered thresholds (see ENGINEERING_LOG)."""
     import math
@@ -289,6 +390,11 @@ def main() -> None:
     stability.add_argument("--config", required=True, help="path to a YAML config in configs/")
     stability.add_argument("--allow-dirty", action="store_true", help="permit a dirty git tree (exploratory, non-reproducible)")
     stability.set_defaults(func=cmd_stability)
+
+    amp = sub.add_parser("amp", help="EXP-006 mixed-precision measured side-experiment (fp32 vs fp16)")
+    amp.add_argument("--config", required=True, help="path to a YAML config in configs/")
+    amp.add_argument("--allow-dirty", action="store_true", help="permit a dirty git tree (exploratory, non-reproducible)")
+    amp.set_defaults(func=cmd_amp)
 
     args = parser.parse_args()
     args.func(args)
