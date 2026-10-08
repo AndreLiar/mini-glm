@@ -1,0 +1,28 @@
+# EXP-005 multi-seed stability (CPU, isolates seed as the only variable). Pre-registered; do not tune.
+experiment: stage2_stability
+seed: 0            # overridden per run by the stability sweep (seeds 0-4)
+device: cpu
+model:
+  d_model: 128
+  n_layers: 4
+  n_heads: 4
+  d_ff: 256
+  max_seq_len: 128
+  rope_theta: 10000.0
+  attn_type: causal
+  ffn_type: dense
+train:
+  steps: 1500      # EXP-004 best val was @ step 1000; 1500 gives margin past the minimum
+  batch_size: 32
+  seq_len: 128
+  lr: 0.0005
+  weight_decay: 0.01
+  grad_clip: 1.0
+  eval_interval: 100
+  eval_batches: 40
+data:
+  source: book
+  path: data/corpus/pride_and_prejudice.txt
+  val_fraction: 0.1
+  test_fraction: 0.1
+  vocab_size: 1024

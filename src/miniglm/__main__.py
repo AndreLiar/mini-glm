@@ -187,6 +187,82 @@ def cmd_train(args) -> None:
     )
 
 
+def cmd_stability(args) -> None:
+    """EXP-005 — multi-seed stability on CPU. Pre-registered thresholds (see ENGINEERING_LOG)."""
+    import math
+    import statistics as st
+
+    import torch
+
+    from .data.loader import PackedLoader
+    from .model.transformer import MiniGLM
+    from .train.pretrain import build_data, evaluate_split, run_steps
+
+    CONV_THRESHOLD = 2.8   # pre-registered: convergence = first eval with val <= 2.8
+    FAIL_VAL = 4.0         # pre-registered: failure = non-finite val OR best val > 4.0
+    SEEDS = [0, 1, 2, 3, 4]
+
+    logger = get_logger()
+    config = Config.from_yaml(args.config)
+    prov = provenance(args.allow_dirty)
+    device = resolve_device(config.device)
+    tcfg = config.train
+    logger.info(f"stability | seeds={SEEDS} device={device} steps={tcfg.steps} conv<= {CONV_THRESHOLD}")
+
+    data = build_data(config)  # built once; tokenizer/split do not depend on the training seed
+    config.model.vocab_size = data.vocab_size
+
+    results = []
+    for seed in SEEDS:
+        set_seed(seed)
+        model = MiniGLM(config.model).to(device)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=tcfg.lr, weight_decay=tcfg.weight_decay)
+        loader = PackedLoader(data.train, tcfg.seq_len, tcfg.batch_size, seed=seed + 1)
+        best_val, best_step, conv_step, failed = float("inf"), -1, None, False
+        for step in range(tcfg.steps):
+            run_steps(model, optimizer, loader, 1, tcfg.accum_steps, tcfg.grad_clip, device)
+            if step % tcfg.eval_interval == 0 or step == tcfg.steps - 1:
+                val = evaluate_split(model, data.val, tcfg.seq_len, tcfg.batch_size, device)
+                if not math.isfinite(val):
+                    failed = True
+                    break
+                if val < best_val:
+                    best_val, best_step = val, step
+                if conv_step is None and val <= CONV_THRESHOLD:
+                    conv_step = step
+        failed = failed or best_val > FAIL_VAL
+        results.append({"seed": seed, "best_val": best_val, "best_step": best_step,
+                        "convergence_step": conv_step, "failed": failed})
+        logger.info(f"seed {seed} | best_val {best_val:.4f}@{best_step} | conv_step {conv_step} | failed {failed}")
+
+    ok = [r["best_val"] for r in results if not r["failed"]]
+    convs = [r["convergence_step"] for r in results if r["convergence_step"] is not None]
+    aggregate = {
+        "best_val_mean": st.mean(ok) if ok else None,
+        "best_val_std": st.stdev(ok) if len(ok) > 1 else 0.0,
+        "best_val_min": min(ok) if ok else None,
+        "best_val_max": max(ok) if ok else None,
+        "convergence_step_mean": st.mean(convs) if convs else None,
+        "failure_rate": sum(r["failed"] for r in results) / len(results),
+    }
+    record = {
+        "experiment": config.experiment,
+        **prov,
+        "config": config.to_dict(),
+        "device": str(device),
+        "hardware": hardware_info(),
+        "pre_registered": {"seeds": SEEDS, "conv_threshold": CONV_THRESHOLD, "fail_val": FAIL_VAL},
+        "per_seed": results,
+        "aggregate": aggregate,
+    }
+    path = write_experiment(record)
+    logger.info(
+        f"DONE | best_val {aggregate['best_val_mean']:.4f} ± {aggregate['best_val_std']:.4f} "
+        f"(min {aggregate['best_val_min']:.4f} max {aggregate['best_val_max']:.4f}) "
+        f"failure_rate {aggregate['failure_rate']:.0%} -> {path}"
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="miniglm")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -208,6 +284,11 @@ def main() -> None:
     analyze.add_argument("--config", required=True, help="path to a YAML config in configs/")
     analyze.add_argument("--allow-dirty", action="store_true", help="permit a dirty git tree (exploratory, non-reproducible)")
     analyze.set_defaults(func=cmd_analyze)
+
+    stability = sub.add_parser("stability", help="EXP-005 multi-seed stability sweep (CPU)")
+    stability.add_argument("--config", required=True, help="path to a YAML config in configs/")
+    stability.add_argument("--allow-dirty", action="store_true", help="permit a dirty git tree (exploratory, non-reproducible)")
+    stability.set_defaults(func=cmd_stability)
 
     args = parser.parse_args()
     args.func(args)

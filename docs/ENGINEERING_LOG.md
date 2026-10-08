@@ -171,8 +171,9 @@ checkpoint/resume with full state; best-val checkpointing; gradient accumulation
 - **test @ best 2.3786 (ppl 10.8)** — one-shot, never used for selection.
 - final val 3.4128 (ppl 30.3) — heavy overfitting by step 3000 (train 0.898 / ppl 2.45).
 ### Observation
-test (10.8) ≈ val (11.1): in this single selection, val was an essentially unbiased estimator — now
-*verified* against untouched test rather than assumed. Overfitting peaks earlier than EXP-003 (step
+test (10.8) ≈ val (11.1): **for this run**, the untouched test estimate closely agreed with the
+validation metric used for selection. (One model / one split / one selection event cannot establish
+statistical unbiasedness — it shows close agreement here, nothing stronger.) Overfitting peaks earlier than EXP-003 (step
 1000 vs 1250) because the train split is smaller (80% vs 90%). Resume is bit-exact on CPU and
 grad-accumulation equals a large batch (atol 1e-5) — the state contract is complete.
 Caveat: test was consulted once here; each future look risks process-overfitting, so it stays untouched
@@ -181,3 +182,29 @@ during development.
 KEEP as the Stage-2 reference. Pipeline is reproducible, resumable, and selection-honest.
 ### Next experiment
 EXP-005 — multi-seed stability on CPU (seeds 0–4; mean ± std; defined failure/convergence).
+
+---
+
+## EXP-005 — Stage 2d: multi-seed stability / the experiment noise floor (PRE-REGISTERED)
+### Question
+What is the run-to-run variability (noise floor) of our experimental system? We must know this before
+Stage 3, or we cannot responsibly claim "MoE is better" when a difference may be within seed noise.
+### Baseline
+EXP-004 reference config, forced to **CPU** (isolates seed as the only variable; avoids MPS
+nondeterminism confounding seed variance).
+### Pre-registered design (fixed BEFORE running — do not change after seeing results)
+- Seeds: 0, 1, 2, 3, 4. Config: `configs/stage2_stability.yaml` (device cpu, steps 1500, eval every 100).
+- **Convergence** := first eval step where val loss ≤ **2.8** nats/token. (Justified from EXP-004: val
+  descends through ~2.8 well before the overfitting turn at step ~1000; 2.8 marks "has learned the
+  distribution" without being in the overfit regime.)
+- **Failure** := any non-finite (NaN/Inf) val loss, OR best val loss > 4.0 (clearly failed to learn).
+- Report per seed: best val, best step, convergence step. Aggregate: mean / std / min / max of best
+  val; mean convergence step; failure rate. Steps capped at 1500 because EXP-004's best val was @1000.
+### Result
+_pending — background CPU run_
+### Observation
+_pending_
+### Decision
+_pending_
+### Next experiment
+Stage 2e benchmarks + perplexity; then Stage 3 (MoE) measured against this noise floor.
