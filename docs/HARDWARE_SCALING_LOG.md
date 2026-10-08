@@ -41,3 +41,9 @@ Dev machine: **Apple MacBook Air M3, 16 GB unified memory, no fan (passive cooli
 | EXP-004 | 787,584 | 787,584 | 128 | 32 | fp32 | MPS | ~11 MB alloc | ~0.46 GB | ~335k | ~52 ms (MPS) | OK |
 | EXP-004 | 787,584 | 787,584 | 128 | 32 | fp32 | CPU | — | — | — | ~95 ms | OK |
 | EXP-005 | 787,584 | 787,584 | 128 | 32 | fp32 | CPU | — | — | — | ~110 ms | OK (5 seeds, ~2.7 min/seed, ~13.5 min total; no throttling concern at this duration) |
+| EXP-006 | 787,584 | 787,584 | 128 | 32 | fp32 | MPS | ~1.19 GB driver | — | 84,690 (fwd+bwd) | — | OK |
+| EXP-006 | 787,584 | 787,584 | 128 | 32 | fp16 | MPS | ~1.19 GB driver | — | 74,097 (fwd+bwd) | — | REVERT (0.87×, no mem win) |
+
+**AMP note (EXP-006):** at this scale fp16 is slower with no memory benefit; memory is dominated by a
+~1.2 GB runtime floor, not activations. Mixed precision becomes worth re-testing only when activations/
+params are large enough to move that floor — expected Stage 3+ (MoE) or longer context.

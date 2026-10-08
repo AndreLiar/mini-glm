@@ -221,3 +221,28 @@ noise — as a guide, Δ ≳ 2–3σ (~0.02–0.03 nats) AND ideally confirmed w
 A +0.04 MoE "win" over a 2.39 ± 0.009 baseline would be real; a +0.01 "win" would be noise.
 ### Next experiment
 Stage 2e benchmarks + perplexity; then Stage 3 (MoE) measured against this noise floor.
+
+---
+
+## EXP-006 — Stage 2f: mixed precision (fp32 vs fp16 autocast) — measured side-experiment
+### Question
+Does fp16 autocast on MPS improve throughput or memory enough to justify adopting it?
+### Hypothesis (pre-registered)
+At ~788k params on MPS, expect REVERT: cast overhead dominates and activations are tiny vs the runtime
+memory floor.
+### Change
+Isolated benchmark (not integrated into the training path): fp32 vs `torch.autocast(mps, float16)`,
+measuring fwd+bwd throughput, driver memory, short-run stability, and verifying the compute dtype changed.
+### Result (MPS, seed 0, reproducible=true, `experiments/0005_stage2_amp.json`)
+- fp32: 84,690 tok/s · logits float32 · mem 1.190 GB · val~3.62
+- fp16: 74,097 tok/s · logits **float16 (dtype_changed=True)** · mem 1.187 GB · val~3.64
+- **speedup 0.87× (12.5% slower); memory ~unchanged (−0.3%).**
+### Observation
+AMP genuinely ran in fp16 (not silent fp32) yet was *slower* with no memory win — the cast overhead
+dominates at this scale and the ~1.2 GB floor is runtime, not activations. No GradScaler was used
+(MPS AMP is not turnkey — itself part of the finding).
+### Decision
+**REVERT.** Do not adopt mixed precision now. Revisit only when a measured memory/throughput wall
+appears (expected Stage 3+ at larger scale), per the capability-introduction rule.
+### Next experiment
+Stage 3 — Mixture-of-Experts, measured against the EXP-005 noise floor (2.3927 ± 0.0091).

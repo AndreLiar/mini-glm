@@ -51,13 +51,13 @@ Seeds 0–4, **run on CPU** (isolates seed as the only variable; avoids the MPS-
   threshold), failure rate (failure := NaN/Inf loss, or val loss above a preset bound).
 - n=5 is labeled **indicative**, not rigorous. Decide whether "training is stable" is now supportable.
 
-## 2e — Benchmarks
+## 2e — Benchmarks ✅ (see docs/reports/stage2_summary.md)
 Throughput + peak memory with the real pipeline, self-describing blocks (reuse Stage-1 format).
 - **Note:** a real vocab (4096) changes embedding/LM-head size, so this model is **not** the 660k
   Stage-1 model. Flag the param count so Stage 3's MoE-vs-dense comparison controls for it.
 - Report **perplexity** (= exp(val loss)) on the disjoint val set as the standard LM metric.
 
-## 2f — Mixed precision (measured side-experiment, likely REVERT)
+## 2f — Mixed precision (measured side-experiment, likely REVERT) ✅ REVERTED (EXP-006: 0.87×, no mem win)
 Only if 2e shows a memory/throughput problem worth solving. Run AMP vs fp32 and measure speed, peak
 memory, and loss delta; verify AMP actually changed dtypes (guard against silent fp32). **Pre-
 registered expectation: REVERT at this scale.** Documenting that reasoning is the deliverable.
