@@ -1,5 +1,8 @@
 # Mini-GLM
 
+> **New to this / no ML background? Start with [`docs/LEARN/`](docs/LEARN/README.md)** — a plain-language,
+> jargon-free guide with two runnable demos. Then come back here.
+
 An educational, reproducible research platform that progressively implements and **measures** modern
 LLM architecture concepts (dense Transformer → MoE → alternative attention → multimodal → post-training).
 It is **not** a reproduction of GLM-5.3-Flash at scale. See `docs/PRODUCT_VISION.md`.
