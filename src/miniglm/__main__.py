@@ -289,6 +289,96 @@ def cmd_amp(args) -> None:
     logger.info(f"DONE | speedup={speedup} dtype_changed={dtype_changed} -> {path}")
 
 
+def cmd_scaling(args) -> None:
+    """EXP-008 — measure how dense attention scales with context length T (Stage 4A).
+
+    Fixed model + batch; vary only T. Records forward / fwd+bwd throughput, peak MPS memory, and decode
+    latency per T, catching OOM/errors as FAIL rows. Reports the theoretical T^2 factor for comparison
+    but MEASURES actual memory (SDPA is fused, so it may scale sub-quadratically)."""
+    import time
+
+    import torch
+
+    from .model.generate import generate
+    from .model.transformer import MiniGLM
+
+    T_LIST = [128, 256, 512, 1024, 2048, 4096]
+    BATCH = 8
+    logger = get_logger()
+    config = Config.from_yaml(args.config)
+    prov = provenance(args.allow_dirty)
+    set_seed(config.seed)
+    device = resolve_device(config.device)
+    vocab = config.data.vocab_size
+    config.model.vocab_size = vocab
+    logger.info(f"scaling | device={device} batch={BATCH} T={T_LIST}")
+
+    def sync():
+        if device.type == "mps":
+            torch.mps.synchronize()
+        elif device.type == "cuda":
+            torch.cuda.synchronize()
+
+    results = []
+    for T in T_LIST:
+        try:
+            if device.type == "mps":
+                torch.mps.empty_cache()
+            config.model.max_seq_len = T
+            model = MiniGLM(config.model).to(device)
+            x = torch.randint(0, vocab, (BATCH, T), device=device)
+
+            with torch.no_grad():
+                for _ in range(2):
+                    model(x)
+                sync()
+                t0 = time.time()
+                for _ in range(5):
+                    model(x)
+                sync()
+                fwd = 5 * BATCH * T / (time.time() - t0)
+
+            opt = torch.optim.AdamW(model.parameters(), lr=1e-4)
+            for _ in range(2):
+                _, loss = model(x, x)
+                opt.zero_grad(set_to_none=True)
+                loss.backward()
+                opt.step()
+            sync()
+            t0 = time.time()
+            for _ in range(5):
+                _, loss = model(x, x)
+                opt.zero_grad(set_to_none=True)
+                loss.backward()
+                opt.step()
+            sync()
+            fwdbwd = 5 * BATCH * T / (time.time() - t0)
+
+            ctx = torch.randint(0, vocab, (1, T), device=device)
+            sync()
+            t0 = time.time()
+            generate(model, ctx, max_new_tokens=8, greedy=True)
+            sync()
+            decode_ms = (time.time() - t0) / 8 * 1000
+
+            mem = int(torch.mps.driver_allocated_memory()) if device.type == "mps" else None
+            results.append({"T": T, "forward_tok_s": fwd, "fwdbwd_tok_s": fwdbwd,
+                            "decode_ms_per_token": decode_ms, "peak_driver_bytes": mem,
+                            "t2_relative": (T / T_LIST[0]) ** 2, "result": "OK"})
+            logger.info(f"T={T:5d} | fwd {fwd:>8,.0f} | fwd+bwd {fwdbwd:>8,.0f} tok/s | "
+                        f"decode {decode_ms:6.1f} ms/tok | mem {None if mem is None else round(mem/1e6)}MB")
+            del model, opt, x
+        except Exception as e:  # OOM / backend limit = the measured wall
+            results.append({"T": T, "result": "FAIL", "error": f"{type(e).__name__}: {e}"})
+            logger.info(f"T={T:5d} | FAIL {type(e).__name__}: {e}")
+            break
+
+    record = {"experiment": "stage4_scaling", **prov, "config": config.to_dict(),
+              "device": str(device), "hardware": hardware_info(), "batch": BATCH, "curve": results}
+    path = write_experiment(record)
+    logger.info(f"DONE -> {path}")
+
+
 def cmd_stability(args) -> None:
     """EXP-005 — multi-seed stability on CPU. Pre-registered thresholds (see ENGINEERING_LOG)."""
     import math
@@ -396,6 +486,11 @@ def main() -> None:
     amp.add_argument("--config", required=True, help="path to a YAML config in configs/")
     amp.add_argument("--allow-dirty", action="store_true", help="permit a dirty git tree (exploratory, non-reproducible)")
     amp.set_defaults(func=cmd_amp)
+
+    scaling = sub.add_parser("scaling", help="EXP-008 attention scaling curve vs context length")
+    scaling.add_argument("--config", required=True, help="path to a YAML config in configs/")
+    scaling.add_argument("--allow-dirty", action="store_true", help="permit a dirty git tree (exploratory, non-reproducible)")
+    scaling.set_defaults(func=cmd_scaling)
 
     args = parser.parse_args()
     args.func(args)

@@ -277,7 +277,7 @@ real arbiter).
 | Both lose | valid result at this scale |
 Routing note: declining entropy is NOT automatically bad — judge entropy + cv_load + dead_experts
 TOGETHER (healthy specialization vs collapse). Do NOT tune `moe_aux_weight` then compare as one
-experiment — that is a separate family (EXP-008), val for tuning, test untouched.
+experiment — that is a separate later aux-weight family, val for tuning, test untouched.
 ### Result — Phase 1 (seed 0, MPS, reproducible=true)
 | Model | Total | Active/token | Best val | ppl | test@best | tok/s | Peak mem |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -290,19 +290,46 @@ experts** · max_load ≤ 0.21 → **healthy, no collapse** (implementation corr
 
 Artifacts: `experiments/0006_stage3_dense.json`, `0007_stage3_moe.json`, `0008_stage3_moe_matched.json`.
 ### Observation
-- Against EXP-005 noise floor (σ≈0.009): 007A is **+0.0088 (~1σ, a tie)** vs dense but at 4.5× params /
-  4.3× slower; 007B is **+0.028 (~3σ worse)** at matched active width. **Neither MoE beat dense.**
-- Critically: 007A (more active compute) merely tied while 007B (matched active compute) was worse →
-  **no evidence that sparse conditional capacity itself helped** at this scale.
-- Hardware: predicted **memory** wall did NOT appear (+140–240 MB over a ~1.4 GB runtime floor). The
-  real cost is **throughput** (3–4× slower) = the Python per-expert dispatch loop + many small MPS
-  kernels → an implementation/backend limit, NOT "MoE is inefficient" and NOT capacity/memory.
+- 007A vs dense: Δ = +0.0088 ≈ **1 dense-σ (0.0091) → a quality tie**, not evidence dense is
+  intrinsically better. 007B vs dense: Δ ≈ +0.028 ≈ 3× dense noise → **seed-0 evidence of
+  degradation** (NOT a formal significance test — MoE's own variance is unmeasured).
+- 007A (more active compute) only tied while 007B (active-width-matched) was worse → **no demonstrated
+  benefit from sparse conditional capacity itself** at this scale.
+- Overfitting: the larger MoE (007A) degrades more severely late in training (val 2.41 → 2.96),
+  **consistent with excess capacity relative to this tiny corpus** — NOT isolated proof that parameter
+  count alone is causal (007A also changes routing, active compute, #FFNs, aux loss).
+- Hardware: predicted **memory** wall did NOT appear (+140–240 MB over a ~1.4 GB runtime floor). Real
+  cost is **throughput** (3–4× slower) = the Python per-expert dispatch loop + many small MPS kernels
+  → an implementation/backend limit, NOT "MoE is inefficient" and NOT capacity/memory.
+- Unresolved: healthy routing rules out *collapse* as the failure mode, but does NOT establish that
+  meaningful **expert specialization** emerged — entropy stayed near max (balance loss may dominate at
+  this scale = weak specialization). Would need an aux-weight sweep (separate family) + specialization
+  probing at larger scale.
 ### Decision
-**REVERT at this scale.** Dense stays the baseline (`ffn_type` default already "dense"); MoE code
-remains available behind the factory for future larger-scale experiments. Routing health confirms the
-REVERT is about scale/data, not a bug. A full multi-seed Phase 2 is NOT needed to "confirm a win"
-(there is no win); the tie-at-4×-cost is decisive. (Optional later: a light 3-seed run to characterize
-MoE's *own* variance — would not change this decision.)
+**REVERT to dense as baseline at this scale** (and note REVERT ≠ delete — MoE stays behind
+`ffn_type: moe` for future scale-up / optimized backend / a question that needs conditional capacity).
+Summary (fully qualified): *At ~0.8M-param dense-model scale on a single-book corpus, Top-2 MoE showed
+healthy routing but no demonstrated quality benefit; the full-width variant tied dense quality at ~4.3×
+lower throughput, while the active-width-matched variant degraded quality. We retain the implementation
+for future scale experiments but revert to dense as the baseline.* Multi-seed Phase 2 deferred: its
+expected information gain is low because 4.3× slower at a quality tie is decisive regardless of seed noise.
 ### Next
-Stage 4 — attention experiments (long context), where sequence length creates a real memory/throughput
-problem our hardware will actually expose. MoE revisited only if/when we deliberately scale up.
+EXP-008 (Stage 4A) — measure how dense causal attention scales with sequence length, and find where it
+becomes unacceptable on this hardware. MoE revisited only if/when we deliberately scale up.
+
+---
+
+## EXP-008 — Stage 4A: attention scaling curve (PRE-REGISTERED)
+### Question
+How does dense causal attention (via PyTorch SDPA) scale with context length T on this M3, and where
+does it become unacceptable? This is a measurement experiment — NO new architecture yet.
+### Design (fixed before running)
+Fixed model (d_model 128, 4 layers, vocab 1024), fixed batch; vary only T ∈ {128,256,512,1024,2048,
+4096}. Per T measure: forward tok/s, fwd+bwd tok/s, step latency, peak MPS driver memory, decode
+latency. Catch OOM/errors per T and record a FAIL row. Report the theoretical T²-relative factor for
+comparison but DO NOT assume it — SDPA is a fused kernel, so measured memory may differ.
+### Prediction (to be tested, not assumed)
+Compute/latency rise with T; memory may rise sub-quadratically thanks to SDPA's fused kernel. The wall
+(if any) is more likely throughput/latency than OOM at this small model size — but we MEASURE.
+### Result / Observation / Decision / Next
+_pending — EXP-008 run_
