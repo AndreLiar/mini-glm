@@ -36,7 +36,11 @@ class ModelConfig:
     max_seq_len: int = 128
     rope_theta: float = 10000.0
     attn_type: str = "causal"      # Stage 4 will add "gqa", "sliding", ...
-    ffn_type: str = "dense"        # Stage 3 will add "moe"
+    ffn_type: str = "dense"        # "dense" | "moe"
+    # Mixture-of-Experts (used when ffn_type == "moe"; ADR 0009)
+    n_experts: int = 8
+    moe_top_k: int = 2
+    moe_aux_weight: float = 0.01   # weight of the load-balancing loss added to training loss
 
 
 @dataclass

@@ -22,5 +22,8 @@ def build_attention(cfg: ModelConfig) -> nn.Module:
 def build_feedforward(cfg: ModelConfig) -> nn.Module:
     if cfg.ffn_type == "dense":
         return SwiGLU(cfg)
-    # Stage 3 will register "moe" here.
+    if cfg.ffn_type == "moe":
+        from .moe import MoEFeedForward  # local import keeps the dense path dependency-free
+
+        return MoEFeedForward(cfg)
     raise ValueError(f"Unknown ffn_type: {cfg.ffn_type!r}")

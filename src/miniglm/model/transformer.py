@@ -71,6 +71,13 @@ class MiniGLM(nn.Module):
         loss = None
         if targets is not None:
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1))
+            # Add MoE load-balancing loss from any expert layers (0 for a dense model).
+            aux = 0.0
+            for module in self.modules():
+                a = getattr(module, "last_aux_loss", None)
+                if a is not None:
+                    aux = aux + a
+            loss = loss + self.cfg.moe_aux_weight * aux
         return logits, loss
 
     def num_params(self, trainable_only: bool = False) -> int:
