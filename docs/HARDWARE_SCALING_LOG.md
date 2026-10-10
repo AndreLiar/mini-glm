@@ -47,3 +47,12 @@ Dev machine: **Apple MacBook Air M3, 16 GB unified memory, no fan (passive cooli
 **AMP note (EXP-006):** at this scale fp16 is slower with no memory benefit; memory is dominated by a
 ~1.2 GB runtime floor, not activations. Mixed precision becomes worth re-testing only when activations/
 params are large enough to move that floor — expected Stage 3+ (MoE) or longer context.
+
+| EXP-007 dense | 787,584 | 787,584 | 128 | 32 | fp32 | MPS | 1395 MB driver | — | 351,872 (fwd) | — | baseline |
+| EXP-007A MoE | 3,544,192 | 1,184,896 | 128 | 32 | fp32 | MPS | 1631 MB driver | — | 82,418 (fwd) | — | REVERT (tie, 4.3× slower) |
+| EXP-007B MoE | 1,971,328 | 791,680 | 128 | 32 | fp32 | MPS | 1531 MB driver | — | 114,092 (fwd) | — | REVERT (worse, 3.1× slower) |
+
+**MoE note (EXP-007):** the predicted *memory* wall did NOT appear at this scale (+140–240 MB over the
+~1.4 GB runtime floor). The real penalty is **throughput** (3–4× slower) from the educational Python
+per-expert dispatch loop + many small MPS kernels — an implementation/backend limit, not model capacity.
+Optimized grouped-GEMM / fused MoE kernels are what solve this; out of scope here.

@@ -278,7 +278,31 @@ real arbiter).
 Routing note: declining entropy is NOT automatically bad — judge entropy + cv_load + dead_experts
 TOGETHER (healthy specialization vs collapse). Do NOT tune `moe_aux_weight` then compare as one
 experiment — that is a separate family (EXP-008), val for tuning, test untouched.
-### Result
-_pending — Phase 1 (seed 0) background run_
-### Observation / Decision / Next
-_pending_
+### Result — Phase 1 (seed 0, MPS, reproducible=true)
+| Model | Total | Active/token | Best val | ppl | test@best | tok/s | Peak mem |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Dense | 787,584 | 787,584 | **2.3966** | 10.99 | 2.3726 | 351,872 | 1395 MB |
+| 007A (8×256) | 3,544,192 | 1,184,896 | 2.4054 | 11.08 | 2.3784 | 82,418 | 1631 MB |
+| 007B (8×128) | 1,971,328 | 791,680 | 2.4247 | 11.30 | 2.4063 | 114,092 | 1531 MB |
+
+Routing (all layers, final eval): entropy ≈ 2.07–2.08 / 2.079 max · cv_load 0.12–0.26 · **0 dead
+experts** · max_load ≤ 0.21 → **healthy, no collapse** (implementation correct; aux-loss balanced it).
+
+Artifacts: `experiments/0006_stage3_dense.json`, `0007_stage3_moe.json`, `0008_stage3_moe_matched.json`.
+### Observation
+- Against EXP-005 noise floor (σ≈0.009): 007A is **+0.0088 (~1σ, a tie)** vs dense but at 4.5× params /
+  4.3× slower; 007B is **+0.028 (~3σ worse)** at matched active width. **Neither MoE beat dense.**
+- Critically: 007A (more active compute) merely tied while 007B (matched active compute) was worse →
+  **no evidence that sparse conditional capacity itself helped** at this scale.
+- Hardware: predicted **memory** wall did NOT appear (+140–240 MB over a ~1.4 GB runtime floor). The
+  real cost is **throughput** (3–4× slower) = the Python per-expert dispatch loop + many small MPS
+  kernels → an implementation/backend limit, NOT "MoE is inefficient" and NOT capacity/memory.
+### Decision
+**REVERT at this scale.** Dense stays the baseline (`ffn_type` default already "dense"); MoE code
+remains available behind the factory for future larger-scale experiments. Routing health confirms the
+REVERT is about scale/data, not a bug. A full multi-seed Phase 2 is NOT needed to "confirm a win"
+(there is no win); the tie-at-4×-cost is decisive. (Optional later: a light 3-seed run to characterize
+MoE's *own* variance — would not change this decision.)
+### Next
+Stage 4 — attention experiments (long context), where sequence length creates a real memory/throughput
+problem our hardware will actually expose. MoE revisited only if/when we deliberately scale up.

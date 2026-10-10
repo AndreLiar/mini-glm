@@ -1,0 +1,187 @@
+{
+  "experiment": "stage3_dense",
+  "git_commit": "d40871ebd466fd27e8c14c5b43e79a9b54193310",
+  "git_dirty": false,
+  "reproducible": true,
+  "config": {
+    "experiment": "stage3_dense",
+    "seed": 0,
+    "device": "auto",
+    "model": {
+      "vocab_size": 1024,
+      "d_model": 128,
+      "n_layers": 4,
+      "n_heads": 4,
+      "d_ff": 256,
+      "max_seq_len": 128,
+      "rope_theta": 10000.0,
+      "attn_type": "causal",
+      "ffn_type": "dense",
+      "n_experts": 8,
+      "moe_top_k": 2,
+      "moe_aux_weight": 0.01
+    },
+    "train": {
+      "steps": 1500,
+      "batch_size": 32,
+      "accum_steps": 1,
+      "seq_len": 128,
+      "lr": 0.0005,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "eval_interval": 100,
+      "eval_batches": 40
+    },
+    "data": {
+      "source": "book",
+      "val_fraction": 0.1,
+      "test_fraction": 0.1,
+      "path": "data/corpus/pride_and_prejudice.txt",
+      "vocab_size": 1024
+    },
+    "toy": {
+      "input_dim": 16,
+      "output_dim": 4,
+      "n_samples": 512,
+      "noise_std": 0.05,
+      "batch_size": 32,
+      "steps": 300,
+      "lr": 0.05
+    }
+  },
+  "seed": 0,
+  "device": "mps",
+  "hardware": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "python": "3.12.8"
+  },
+  "memory": {
+    "param_bytes": 3150336,
+    "optimizer_state_bytes": 6300792,
+    "mps_current_alloc_bytes": 12683264,
+    "mps_driver_alloc_bytes": 1395376128,
+    "peak_process_rss_bytes": 412467200
+  },
+  "benchmark": {
+    "type": "forward",
+    "batch_size": 32,
+    "sequence_length": 128,
+    "tokens_per_iteration": 4096,
+    "warmup_iterations": 3,
+    "measured_iterations": 20,
+    "dtype": "float32",
+    "device": "mps",
+    "tokens_per_second": 351872.00576763164
+  },
+  "metrics": {
+    "total_params": 787584,
+    "active_params_per_token": 787584,
+    "vocab_size": 1024,
+    "final_train_loss": 1.7080754488706589,
+    "final_val_loss": 2.4893206711653826,
+    "best_val_loss": 2.3966460874229125,
+    "best_step": 1100,
+    "test_loss_at_best": 2.372585441755212,
+    "val_perplexity_best": 10.986267539849907,
+    "test_perplexity_at_best": 10.725085553034857,
+    "loss_history": [
+      {
+        "step": 0,
+        "train": 6.491477572917939,
+        "val": 6.485559077489944,
+        "moe": null
+      },
+      {
+        "step": 100,
+        "train": 3.937741667032242,
+        "val": 3.884882219545134,
+        "moe": null
+      },
+      {
+        "step": 200,
+        "train": 3.5159518837928774,
+        "val": 3.4940001379439245,
+        "moe": null
+      },
+      {
+        "step": 300,
+        "train": 3.080184316635132,
+        "val": 3.0946285890572236,
+        "moe": null
+      },
+      {
+        "step": 400,
+        "train": 2.788809758424759,
+        "val": 2.8388594952258437,
+        "moe": null
+      },
+      {
+        "step": 500,
+        "train": 2.561206358671188,
+        "val": 2.655059977765485,
+        "moe": null
+      },
+      {
+        "step": 600,
+        "train": 2.415513890981674,
+        "val": 2.5523985681079684,
+        "moe": null
+      },
+      {
+        "step": 700,
+        "train": 2.2971534430980682,
+        "val": 2.4852837957305347,
+        "moe": null
+      },
+      {
+        "step": 800,
+        "train": 2.2043348073959352,
+        "val": 2.432442172543033,
+        "moe": null
+      },
+      {
+        "step": 900,
+        "train": 2.127288520336151,
+        "val": 2.4097667386680297,
+        "moe": null
+      },
+      {
+        "step": 1000,
+        "train": 2.039206165075302,
+        "val": 2.4061830672588975,
+        "moe": null
+      },
+      {
+        "step": 1100,
+        "train": 1.9728765726089477,
+        "val": 2.3966460874229125,
+        "moe": null
+      },
+      {
+        "step": 1200,
+        "train": 1.9053577661514283,
+        "val": 2.4219355303725916,
+        "moe": null
+      },
+      {
+        "step": 1300,
+        "train": 1.8368926525115967,
+        "val": 2.4288124103685873,
+        "moe": null
+      },
+      {
+        "step": 1400,
+        "train": 1.7698960423469543,
+        "val": 2.4730912896739694,
+        "moe": null
+      },
+      {
+        "step": 1499,
+        "train": 1.7080754488706589,
+        "val": 2.4893206711653826,
+        "moe": null
+      }
+    ]
+  }
+}

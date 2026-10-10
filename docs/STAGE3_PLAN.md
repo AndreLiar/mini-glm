@@ -38,7 +38,12 @@ Records **per MoE layer** (never averaged into one global number — collapse ca
 Goal: distinguish **healthy specialization** (entropy falls, no starvation, quality improves) from
 **collapse** (a few experts dominate, others die). Success is NOT "all experts == 12.5% forever".
 
-### 3c — The comparison experiment(s) (EXP-007) — pre-register before running
+### 3c — The comparison experiment(s) (EXP-007) ✅ done → REVERT at this scale
+Phase 1 (seed 0): dense ppl 10.99 vs 007A 11.08 (tie, ~1σ, but 4.5× params/4.3× slower) vs 007B 11.30
+(~3σ worse). Routing healthy (no collapse). Neither MoE beat dense → REVERT at this scale; see
+ENGINEERING_LOG EXP-007. Pre-registration kept below for the record.
+
+### 3c — pre-registration (kept for the record)
 Hold EVERYTHING fixed except the FFN; multi-seed (reuse EXP-005 protocol) so the result clears the
 noise floor. Two runs, because "same compute" is subtle (see ADR 0009):
 - **EXP-007A — full width:** dense `d_ff=256` vs MoE 8×`d_ff=256` Top-2 → tests *capacity + ~2× active compute*.
