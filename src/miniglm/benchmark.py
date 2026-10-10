@@ -15,6 +15,19 @@ def count_params(model) -> int:
     return sum(p.numel() for p in model.parameters())
 
 
+def count_active_params(model) -> int:
+    """Parameters actually used per token. For MoE, only top_k of n_experts run, so the other
+    experts' parameters don't contribute to a given token's compute — the heart of the MoE story."""
+    from .model.moe import MoEFeedForward
+
+    inactive = 0
+    for m in model.modules():
+        if isinstance(m, MoEFeedForward):
+            per_expert = sum(p.numel() for p in m.experts[0].parameters())
+            inactive += (m.n_experts - m.top_k) * per_expert
+    return count_params(model) - inactive
+
+
 @torch.no_grad()
 def measure_throughput(model, idx: torch.Tensor, iters: int = 20, warmup: int = 3) -> float:
     """Forward-pass tokens/sec. Warmup excludes one-time kernel compilation/allocation costs."""

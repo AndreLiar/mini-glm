@@ -246,3 +246,39 @@ dominates at this scale and the ~1.2 GB floor is runtime, not activations. No Gr
 appears (expected Stage 3+ at larger scale), per the capability-introduction rule.
 ### Next experiment
 Stage 3 — Mixture-of-Experts, measured against the EXP-005 noise floor (2.3927 ± 0.0091).
+
+---
+
+## EXP-007 — Stage 3c: dense vs MoE (PRE-REGISTERED, two-phase)
+### Question
+Under our dataset / model scale / hardware / active-compute budget, does sparse conditional capacity
+(MoE) actually buy anything over the dense baseline?
+### Design (fixed before running)
+Three configs differing only in the FFN: `stage3_dense` (d_ff 256), `stage3_moe` = **007A** (8×256
+Top-2: more capacity AND ~2× active FFN compute), `stage3_moe_matched` = **007B** (8×128 Top-2:
+active FFN width ≈ 256 ≈ dense — *active-width matched*, NOT exact compute-matched; tokens/sec is the
+real arbiter).
+- **Phase 1 (screening):** seed 0 for all three. Inspect quality + per-layer routing health + speed +
+  memory + capacity. Only proceed to Phase 2 if routing is healthy and results are sensible.
+- **Phase 2 (confirmation, only if Phase 1 healthy):** multi-seed; report **each architecture's OWN
+  mean ± std** (do NOT assume dense's σ≈0.009 is MoE's — MoE adds router/top-k/specialization variance).
+- Report per model: total params · **active params/token** · param+optimizer bytes · peak memory ·
+  best val · train/inference tokens/sec · per-layer routing (entropy, cv_load, dead_experts).
+### Pre-registered decision table
+| Outcome | Decision |
+|---|---|
+| Better quality + healthy routing | KEEP |
+| Same quality + materially higher cost | REVERT for this scale |
+| Better quality but far slower | CONDITIONAL KEEP (document trade-off) |
+| Worse quality + healthy routing | REVERT this config |
+| Router collapse (expert <1% sustained, or top >40%, or cv_load >1.0) | INVESTIGATE before judging MoE |
+| 007A wins but 007B doesn't | gain likely from extra active compute, NOT sparse capacity alone |
+| 007B wins | strongest evidence conditional capacity itself helps |
+| Both lose | valid result at this scale |
+Routing note: declining entropy is NOT automatically bad — judge entropy + cv_load + dead_experts
+TOGETHER (healthy specialization vs collapse). Do NOT tune `moe_aux_weight` then compare as one
+experiment — that is a separate family (EXP-008), val for tuning, test untouched.
+### Result
+_pending — Phase 1 (seed 0) background run_
+### Observation / Decision / Next
+_pending_

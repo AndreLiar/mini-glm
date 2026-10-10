@@ -21,7 +21,7 @@ def cmd_pretrain(args) -> None:
 
     import torch
 
-    from .benchmark import count_params, measure_throughput, memory_report
+    from .benchmark import count_active_params, count_params, measure_throughput, memory_report
     from .train.checkpoint import load_checkpoint
     from .train.pretrain import evaluate_split, train_lm
 
@@ -67,6 +67,7 @@ def cmd_pretrain(args) -> None:
         },
         "metrics": {
             "total_params": count_params(model),
+            "active_params_per_token": count_active_params(model),
             "vocab_size": data.vocab_size,
             "final_train_loss": final["train"],
             "final_val_loss": final["val"],
