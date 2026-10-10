@@ -1,8 +1,10 @@
+import math
+
 import torch
 
 from miniglm.config import ModelConfig
 from miniglm.model.feedforward import SwiGLU
-from miniglm.model.moe import MoEFeedForward, load_balancing_loss
+from miniglm.model.moe import MoEFeedForward, collect_moe_stats, expert_stats, load_balancing_loss
 from miniglm.model.transformer import MiniGLM
 
 
@@ -43,13 +45,16 @@ def test_output_is_weighted_sum_of_exactly_its_two_experts():
     assert torch.allclose(out, expected, atol=1e-5)
 
 
-def test_load_balancing_loss_penalizes_collapse():
-    """Concentrated routing must score higher than balanced routing."""
+def test_load_balancing_loss_penalizes_collapse_and_is_normalized():
+    """Concentrated routing scores higher; perfectly balanced routing == 1.0 for ANY top_k."""
     e = 8
     n = 100
     # Balanced: uniform probs, each expert gets an equal share of token-slots.
     probs_bal = torch.full((n, e), 1.0 / e)
-    counts_bal = torch.full((e,), n * 2 / e)
+    counts_bal = torch.full((e,), n * 2 / e)  # top_k=2 -> sum = 2n, but f normalizes by the sum
+    balanced = load_balancing_loss(probs_bal, counts_bal, e)
+    assert abs(float(balanced) - 1.0) < 1e-5  # normalization: perfect balance -> 1.0, k-invariant
+
     # Collapsed: almost all probability + all tokens on experts 0 and 1.
     probs_col = torch.full((n, e), 0.01 / (e - 2))
     probs_col[:, 0] = 0.9
@@ -57,7 +62,35 @@ def test_load_balancing_loss_penalizes_collapse():
     counts_col = torch.zeros(e)
     counts_col[0] = n
     counts_col[1] = n
-    assert load_balancing_loss(probs_col, counts_col, e) > load_balancing_loss(probs_bal, counts_bal, e)
+    assert load_balancing_loss(probs_col, counts_col, e) > balanced
+
+
+def test_expert_stats_entropy_and_dead_detection():
+    e = 8
+    # Uniform routing: entropy == log(E), no dead experts, zero load spread.
+    uniform = expert_stats(torch.full((e,), 10.0), torch.full((e,), 1.0 / e), torch.tensor(1.0), e)
+    assert abs(uniform["entropy"] - math.log(e)) < 1e-4
+    assert uniform["dead_experts"] == 0
+    assert uniform["cv_load"] < 1e-4
+
+    # Collapsed routing: all mass on expert 0 -> 7 dead experts, entropy ~0, high spread.
+    counts = torch.zeros(e)
+    counts[0] = 80
+    probs = torch.zeros(e)
+    probs[0] = 1.0
+    collapsed = expert_stats(counts, probs, torch.tensor(1.0), e)
+    assert collapsed["dead_experts"] == e - 1
+    assert collapsed["entropy"] < 0.1
+    assert collapsed["cv_load"] > uniform["cv_load"]
+
+
+def test_collect_moe_stats_is_per_layer():
+    moe_model = MiniGLM(_cfg(ffn_type="moe", n_layers=3))
+    moe_model(torch.randint(0, 32, (2, 8)))
+    stats = collect_moe_stats(moe_model)
+    assert stats is not None and len(stats) == 3          # one entry per MoE layer, kept separate
+    assert all("entropy" in s and len(s["fraction"]) == 8 for s in stats)
+    assert collect_moe_stats(MiniGLM(_cfg(ffn_type="dense"))) is None  # dense -> nothing to report
 
 
 def test_moe_model_trains_and_has_more_params_than_dense():

@@ -24,6 +24,14 @@ Add an MoE feed-forward behind the existing `ffn_type` factory (dense stays sele
   real wall only if we scale the model up — recorded in `HARDWARE_SCALING_LOG.md`).
 - (−) New failure mode (router collapse) — instrumented and watched, not assumed away.
 
+## Active-compute clarification (added after review)
+"Constant active compute" is **not** literally true for Top-2 with full-width experts. With expert
+`d_ff` = dense `d_ff`, each token runs **2 experts ≈ 2× the dense FFN compute**, plus router +
+dispatch overhead. So Top-2/8 at full width = *more capacity AND ~2× active FFN compute*. A truly
+compute-matched comparison halves the expert width (expert `d_ff ≈ dense d_ff / k`). Stage 3c therefore
+runs **both**: EXP-007A (full width — capacity+compute) and EXP-007B (compute-matched — the stronger
+test of "does conditional capacity help at equal active compute?").
+
 ## Alternatives considered
 - **Top-1 routing** — cheaper but higher-variance/less stable; Top-2 is the common, more stable start.
 - **More experts (32/64)** — defer until Top-2/8 is understood and measured (incremental complexity).

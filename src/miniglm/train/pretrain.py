@@ -13,6 +13,7 @@ from ..config import Config
 from ..data.loader import PackedLoader
 from ..data.text_corpus import TextCorpus, pack
 from ..data.tiny import CharData
+from ..model.moe import collect_moe_stats
 from ..model.transformer import MiniGLM
 from .checkpoint import load_checkpoint, save_checkpoint
 
@@ -95,7 +96,8 @@ def train_lm(config: Config, device, logger, resume_path: str | None = None, ckp
         if step % tcfg.eval_interval == 0 or step == tcfg.steps - 1:
             val = evaluate_split(model, data.val, tcfg.seq_len, tcfg.batch_size, device)
             tr = evaluate_split(model, data.train, tcfg.seq_len, tcfg.batch_size, device, max_batches=tcfg.eval_batches)
-            history.append({"step": step, "train": tr, "val": val})
+            # MoE routing health per layer (None for a dense model); recorded across training.
+            history.append({"step": step, "train": tr, "val": val, "moe": collect_moe_stats(model)})
             logger.info(f"step {step:4d} | train {tr:.4f} | val {val:.4f}")
             if ckpt_dir:
                 save_checkpoint(Path(ckpt_dir) / "last.pt", model, optimizer, loader, step + 1, best_val, best_step, config)

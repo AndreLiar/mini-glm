@@ -1,0 +1,25 @@
+# EXP-007B compute-matched MoE: 8 experts x d_ff=128, Top-2 (2x128~=256 active, ~= dense FFN compute).
+experiment: stage3_moe_matched
+seed: 0
+device: auto
+model:
+  d_model: 128
+  n_layers: 4
+  n_heads: 4
+  d_ff: 128
+  max_seq_len: 128
+  attn_type: causal
+  ffn_type: moe
+  n_experts: 8
+  moe_top_k: 2
+  moe_aux_weight: 0.01
+train:
+  steps: 1500
+  batch_size: 32
+  seq_len: 128
+  lr: 0.0005
+  eval_interval: 100
+  eval_batches: 40
+data:
+  source: book
+  vocab_size: 1024

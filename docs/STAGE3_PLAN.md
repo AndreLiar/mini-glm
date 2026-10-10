@@ -17,7 +17,7 @@ A MoE result counts as an improvement ONLY if **both** hold:
 Otherwise: MODIFY or REVERT, with the measured reason.
 
 ## Sub-milestones (each with falsifiable tests)
-### 3a — MoE layer + router
+### 3a — MoE layer + router ✅ done
 - `MoEFeedForward`: 8 expert SwiGLU blocks + linear router; Top-2 select; softmax-weighted combine;
   auxiliary load-balancing loss returned alongside the output.
 - Wire into `build_feedforward` under `ffn_type: moe`; dense unchanged.
@@ -27,16 +27,40 @@ Otherwise: MODIFY or REVERT, with the measured reason.
   - a uniform router gives ~uniform expert usage; a skewed router raises the load-balancing loss
   - total params ≈ dense + (n_experts−1)×expert size; active params per token ≈ dense + 1 expert
 
-### 3b — Instrumentation (we must *see* the routing)
-Record during eval: expert utilization (% tokens per expert), mean router probabilities, tokens per
-expert, and the load-balancing loss value. Collapse = a few experts take almost everything.
+### 3b — Instrumentation (we must *see* the routing) ✅ done
+Records **per MoE layer** (never averaged into one global number — collapse can hit one layer only),
+**across training steps** (in each `loss_history` entry → machine-readable in `experiments/*.json`):
+- expert assignment fraction + mean router probability (two different stories: dispatch vs confidence)
+- **router entropy** (max = log(E) ≈ 2.08 for 8 experts; falling = concentrating)
+- **cv_load** (coefficient of variation of load; 0 = perfectly even) and max/min load
+- **dead_experts** (starved: < 1% of assignments)
+- load-balancing aux loss
+Goal: distinguish **healthy specialization** (entropy falls, no starvation, quality improves) from
+**collapse** (a few experts dominate, others die). Success is NOT "all experts == 12.5% forever".
 
-### 3c — The comparison experiment (EXP-007)
-- Hold EVERYTHING fixed except `ffn_type` (same data/split/seq/steps/seed; same noise-floor protocol).
-- Run dense and MoE; ideally multi-seed (reuse EXP-005 style) so the comparison clears the noise floor.
-- Report table: total params · active params/token · train loss · val loss · tokens/sec · peak memory ·
-  expert utilization · convergence stability.
-- Decide KEEP / MODIFY / REVERT strictly by the success criteria above.
+### 3c — The comparison experiment(s) (EXP-007) — pre-register before running
+Hold EVERYTHING fixed except the FFN; multi-seed (reuse EXP-005 protocol) so the result clears the
+noise floor. Two runs, because "same compute" is subtle (see ADR 0009):
+- **EXP-007A — full width:** dense `d_ff=256` vs MoE 8×`d_ff=256` Top-2 → tests *capacity + ~2× active compute*.
+- **EXP-007B — compute-matched:** dense `d_ff=256` vs MoE 8×`d_ff=128` Top-2 (2×128≈256 active) → the
+  stronger test: *does conditional capacity help at ~equal active FFN compute?*
+
+Report per run: total params · active params/token · param+optimizer bytes · peak MPS/driver memory ·
+train/val loss · **training & inference tokens/sec** · per-layer routing health · convergence stability.
+
+**Pre-registered decision thresholds (fix BEFORE seeing curves):**
+- **Router collapse** if, sustained over ≥2 evals: any expert < 1% assignments, OR top expert > 40%,
+  OR cv_load > 1.0.
+- **Training failure** if NaN/Inf, or val loss fails the EXP-005-style criterion.
+- **Quality win (KEEP)** only if val-loss improvement over dense **> ~2–3σ ≈ 0.02–0.03** (EXP-005 noise
+  floor) AND no collapse, ideally confirmed across seeds. Else MODIFY/REVERT with the measured reason.
+
+### Hardware honesty for 3c
+Benchmark MoE separately (params / active params / bytes / peak memory / train tok/s / inference tok/s).
+At our scale memory likely won't be the wall; the **Python per-expert dispatch loop + many small MPS
+kernels** probably will. If MoE throughput collapses, the honest conclusion is *"this educational
+dispatch is slow on MPS"* — NOT *"MoE is inefficient."* (Optimized grouped-GEMM/fused MoE solves that.)
+Record whatever we measure in `HARDWARE_SCALING_LOG.md`.
 
 ## Instrumentation checklist (watch for router collapse)
 - [ ] expert utilization (tokens routed to each of the 8)

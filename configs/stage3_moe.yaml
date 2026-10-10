@@ -1,0 +1,25 @@
+# EXP-007A full-width MoE: 8 experts x d_ff=256, Top-2 (more capacity AND ~2x active FFN compute).
+experiment: stage3_moe
+seed: 0
+device: auto
+model:
+  d_model: 128
+  n_layers: 4
+  n_heads: 4
+  d_ff: 256
+  max_seq_len: 128
+  attn_type: causal
+  ffn_type: moe
+  n_experts: 8
+  moe_top_k: 2
+  moe_aux_weight: 0.01
+train:
+  steps: 1500
+  batch_size: 32
+  seq_len: 128
+  lr: 0.0005
+  eval_interval: 100
+  eval_batches: 40
+data:
+  source: book
+  vocab_size: 1024

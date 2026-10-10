@@ -9,6 +9,8 @@ Drop-in for the dense SwiGLU: same input/output shape. The per-call load-balanci
 `self.last_aux_loss`; the model collects it and adds it (small weight) to the training loss.
 """
 
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -20,14 +22,54 @@ from .feedforward import SwiGLU
 def load_balancing_loss(probs: torch.Tensor, counts: torch.Tensor, n_experts: int) -> torch.Tensor:
     """Switch/GShard-style balance loss = E * sum_e (f_e * P_e).
 
-    f_e = fraction of token-slots routed to expert e; P_e = mean router probability for expert e.
-    It is large when the experts that receive many tokens are also the high-probability ones — i.e.
-    when routing is concentrated. Minimizing it spreads load across experts.
+    f_e = fraction of token-SLOT assignments routed to expert e; P_e = mean router probability for e.
+    Both sum to 1 — f is normalized by the total number of assignments (counts.sum() = n_tokens * k),
+    NOT by n_tokens, so the loss scale is invariant to Top-k. (Perfectly balanced routing → 1.0.)
+    It is large when the experts that receive many tokens are also the high-probability ones.
     """
-    n_tokens = probs.shape[0]
-    f = counts / n_tokens          # (E,)
-    P = probs.mean(dim=0)          # (E,)
+    f = counts / counts.sum().clamp_min(1)   # (E,), sums to 1 for any k
+    P = probs.mean(dim=0)                     # (E,), sums to 1
     return n_experts * (f * P).sum()
+
+
+def expert_stats(counts: torch.Tensor, prob_mean: torch.Tensor, aux, n_experts: int) -> dict:
+    """Per-layer routing health metrics (Stage 3b) — distinguish specialization from collapse.
+
+    - fraction / prob_mean: the two routing distributions (dispatch vs router confidence)
+    - entropy: of the mean router prob; max is log(E) (uniform). Falling entropy = concentrating.
+    - cv_load: coefficient of variation of dispatch load (0 = perfectly even)
+    - dead_experts: experts receiving < 1% of assignments (starved)
+    """
+    frac = counts / counts.sum().clamp_min(1)
+    P = prob_mean
+    aux = aux.detach() if torch.is_tensor(aux) else aux
+    entropy = float(-(P * P.clamp_min(1e-9).log()).sum())
+    mean_load = 1.0 / n_experts
+    return {
+        "fraction": [round(x, 4) for x in frac.tolist()],
+        "prob_mean": [round(x, 4) for x in P.tolist()],
+        "entropy": round(entropy, 4),
+        "max_entropy": round(math.log(n_experts), 4),
+        "cv_load": round(float(frac.std(unbiased=False)) / mean_load, 4),
+        "dead_experts": int((frac < 0.01).sum()),
+        "max_load": round(float(frac.max()), 4),
+        "min_load": round(float(frac.min()), 4),
+        "aux_loss": round(float(aux), 4),
+    }
+
+
+def collect_moe_stats(model) -> list | None:
+    """One stats dict per MoE layer (in model order), or None if the model is dense.
+
+    Reads the last forward's routing; call after a forward pass. Keeps layers SEPARATE — collapse can
+    happen in just one layer, so we never average them into a single global number.
+    """
+    layers = []
+    for module in model.modules():
+        if isinstance(module, MoEFeedForward) and module.last_expert_counts is not None:
+            layers.append(expert_stats(module.last_expert_counts, module.last_router_prob_mean,
+                                       module.last_aux_loss, module.n_experts))
+    return layers or None
 
 
 class MoEFeedForward(nn.Module):
