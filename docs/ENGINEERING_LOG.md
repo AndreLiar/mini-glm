@@ -331,5 +331,29 @@ comparison but DO NOT assume it — SDPA is a fused kernel, so measured memory m
 ### Prediction (to be tested, not assumed)
 Compute/latency rise with T; memory may rise sub-quadratically thanks to SDPA's fused kernel. The wall
 (if any) is more likely throughput/latency than OOM at this small model size — but we MEASURE.
-### Result / Observation / Decision / Next
-_pending — EXP-008 run_
+### Result (MPS, batch 8, reproducible=true, `experiments/0009_stage4_scaling.json`)
+| T | fwd tok/s | fwd+bwd tok/s | decode ms/tok | peak driver MB |
+|---:|---:|---:|---:|---:|
+| 128 | 256,572 | 73,889 | 1.6 | 108 |
+| 256 | 285,906 | 63,162 | 2.0 | 221 |
+| 512 | 297,410 | 56,655 | 2.5 | 1,169 |
+| 1024 | 301,683 | 40,270 | 4.3 | 2,243 |
+| 2048 | 260,880 | 23,291 | 8.4 | 5,002 |
+| 4096 | 212,921 | **265** | 46.4 | **16,277** |
+### Observation
+- **Prediction confirmed, T² refuted for memory.** Forward COMPUTE stayed ~flat (256–302k tok/s) — SDPA
+  is fused, it does NOT materialize the T×T matrix. Memory grew **~linearly** (~2× per doubling), FAR
+  below the naive T² (which would demand ~1024× = ~110 GB at 4096; actual ~16 GB ≈ 150×). "Measure,
+  don't assume" paid off exactly here.
+- **The measured wall = TRAINING at T=4096.** Peak memory ~16.3 GB saturates the 16 GB machine → swap →
+  fwd+bwd throughput **collapses ~88×** (23,291 → 265 tok/s) and decode jumps to 46 ms/tok. It is the
+  **backward pass** (stored activations) that breaks first: forward/inference at 4096 still runs (213k tok/s).
+- Practical ceiling on this M3: train comfortably to **T≈1024**, usable-but-slow at **2048**, wall at **4096**.
+### Decision
+The wall is real and **memory-driven at long context during training** (not compute, not the MoE-style
+dispatch issue). This JUSTIFIES Stage 4C: introduce **sliding-window attention** (O(T·W) memory) as the
+smallest intervention to push the trainable-context wall back, measured against this curve. (GQA mainly
+helps decode/KV-cache memory — a different axis; lower priority for this training-memory wall.)
+### Next
+Stage 4C — implement sliding-window attention behind the `attn_type` factory; re-run this scaling curve
+with it and show the T=4096 training wall move. Standard causal stays the baseline.

@@ -56,3 +56,20 @@ params are large enough to move that floor — expected Stage 3+ (MoE) or longer
 ~1.4 GB runtime floor). The real penalty is **throughput** (3–4× slower) from the educational Python
 per-expert dispatch loop + many small MPS kernels — an implementation/backend limit, not model capacity.
 Optimized grouped-GEMM / fused MoE kernels are what solve this; out of scope here.
+
+## Context-length scaling (EXP-008, MPS, batch 8, 4-layer d128 model)
+| T | fwd tok/s | fwd+bwd tok/s | decode ms/tok | peak driver MB | result |
+|---:|---:|---:|---:|---:|---|
+| 128 | 256,572 | 73,889 | 1.6 | 108 | OK |
+| 256 | 285,906 | 63,162 | 2.0 | 221 | OK |
+| 512 | 297,410 | 56,655 | 2.5 | 1,169 | OK |
+| 1024 | 301,683 | 40,270 | 4.3 | 2,243 | OK |
+| 2048 | 260,880 | 23,291 | 8.4 | 5,002 | usable, slow |
+| 4096 | 212,921 | **265** | 46.4 | **16,277** | **WALL (training): 16 GB saturated → swap → ~88× collapse** |
+
+**THE FIRST REAL HARDWARE WALL (answers "is the M3 the limit?"):** yes — for *training at long context*.
+At T=4096 peak memory (~16.3 GB) saturates the 16 GB machine and the backward pass collapses ~88×.
+Forward/inference at 4096 still runs (213k tok/s) — it's the stored-activation memory of the *backward*
+pass that breaks first. Memory grew ~linearly in T (SDPA avoids the O(T²) matrix), but near-linear growth
+still hits the ceiling at 4096. Practical ceiling: train to T≈1024 comfortably, 2048 slow, 4096 = wall.
+This is the measured justification for sliding-window attention (Stage 4C), O(T·W) memory.
