@@ -84,6 +84,53 @@ while the model goes from gibberish to `"hello world. hello world..."` — a mod
 
 ---
 
+# ✅ What we've accomplished so far
+
+**Stages 0, 1, and 2 are done.** We have a small but real, working LLM pipeline — it tokenizes text,
+trains a from-scratch Transformer, generates text, and we've proven each part with experiments.
+**33 automated tests pass.** Every claim below is backed by a machine-readable file in `experiments/`
+and a written entry in `docs/ENGINEERING_LOG.md`.
+
+| Stage | What we built | Status | Headline result |
+|---|---|---|---|
+| **0 — Foundation** | project setup, config, reproducibility, tests | ✅ done | clean install; one command runs a training smoke test |
+| **1 — The brain** | dense Transformer (attention, RoPE, RMSNorm, SwiGLU), text generation | ✅ done | memorized a tiny text (loss 3.07 → 0.05); generation reproduces it |
+| **1.1 — Evidence** | proved correctness instead of assuming it | ✅ done | 4 RoPE tests pass; "no-peeking" (causal) test passes |
+| **2 — Training pipeline** | real BPE tokenizer, a real book, train/val/test split, checkpoints | ✅ done | trained on *Pride and Prejudice*; caught overfitting with evidence |
+
+### The experiments we ran (plain-language results)
+| Exp | Question (plain) | What we found |
+|---|---|---|
+| EXP-001 | Does the brain actually learn? | Yes — it memorized a tiny text perfectly |
+| EXP-002 | Is it *correct*, or just lucky? | Proved the position + "no-peeking" machinery are correct |
+| EXP-003 | Does it learn, or just memorize? | On a real book it started **memorizing** (overfitting) — caught it |
+| EXP-004 | Is our "exam" honest? | The hidden final exam agreed with our practice exam ✅ |
+| EXP-005 | How much do results wobble? | Very little (±0.009) — so we can trust future comparisons |
+| EXP-006 | Does a popular speed trick help us? | No — measured it, **removed it** (decide by evidence) |
+
+**In one line:** we built an autocomplete, trained it on a book, and proved with careful experiments
+that it truly learns (and catches itself when it just memorizes).
+
+# 🗺️ What's next (roadmap to the finish)
+
+We're currently **paused on new code** so the learning sinks in (see the Learning Guide above). When
+ready, the remaining stages each add one capability — always as a *measured experiment*, never "because
+big models have it":
+
+| Stage | Adds (plain) | Why it's interesting |
+|---|---|---|
+| **3 — Mixture-of-Experts** ⬅ *next* | many small "expert" sub-brains; each word uses only a couple | more capacity at ~same compute — but ~8× the memory (our first hardware wall) |
+| **4 — Attention experiments** | cheaper ways for words to "look back" | needed when text gets long (memory grows fast) |
+| **5 — Multimodal** | let the model see **images**, not just text | the model becomes a vision+text model |
+| **6 — Post-training** | teach it to **follow instructions** (like ChatGPT) | turns a raw autocomplete into a helpful assistant |
+| **Later** | evaluation suite, faster inference, serving via an API | turning the model into a usable product |
+
+**Immediate next step:** *you* work through the Learning Guide + demos + rasbt Chapter 2, then tell me
+what's still fuzzy. Only once Stages 1–2 feel clear do we start **Stage 3 (Mixture-of-Experts)** — and
+we'll plan it in plain language first.
+
+---
+
 ## Install (from scratch)
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
