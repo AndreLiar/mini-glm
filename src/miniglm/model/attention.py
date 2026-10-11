@@ -36,6 +36,29 @@ class CausalSelfAttention(nn.Module):
         y = y.transpose(1, 2).contiguous().view(B, T, C)
         return self.proj(y)
 
+    def forward_cached(self, x, cos, sin, cache):
+        """Decode/prefill with a KV cache (EXP-010). cache = (past_k, past_v) or None.
+
+        Prefill (cache is None, Tq=T): behaves like forward() and returns the prompt's K/V as the cache.
+        Decode (cache given, Tq=1): appends the new token's K/V to the cache; the single query attends to
+        all cached keys (all in the past) so no causal mask is needed. Returns (output, new_cache)."""
+        B, Tq, C = x.shape
+        q, k, v = self.qkv(x).split(C, dim=2)
+        q = q.view(B, Tq, self.n_heads, self.head_dim).transpose(1, 2)
+        k = k.view(B, Tq, self.n_heads, self.head_dim).transpose(1, 2)
+        v = v.view(B, Tq, self.n_heads, self.head_dim).transpose(1, 2)
+        q = apply_rope(q, cos, sin)
+        k = apply_rope(k, cos, sin)
+        if cache is not None:
+            past_k, past_v = cache
+            k = torch.cat([past_k, k], dim=2)
+            v = torch.cat([past_v, v], dim=2)
+        new_cache = (k, v)
+        # prefill needs the causal mask over the prompt; single-token decode attends to all cached keys
+        y = F.scaled_dot_product_attention(q, k, v, is_causal=(cache is None and Tq > 1))
+        y = y.transpose(1, 2).contiguous().view(B, Tq, C)
+        return self.proj(y), new_cache
+
 
 class SlidingWindowAttention(nn.Module):
     """Local causal attention: each token attends only to itself and the previous W-1 tokens (Stage 4C).

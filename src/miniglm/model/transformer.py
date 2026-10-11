@@ -32,6 +32,12 @@ class TransformerBlock(nn.Module):
         x = x + self.ffn(self.norm2(x))
         return x
 
+    def forward_cached(self, x, cos, sin, cache):
+        h, new_cache = self.attn.forward_cached(self.norm1(x), cos, sin, cache)
+        x = x + h
+        x = x + self.ffn(self.norm2(x))
+        return x, new_cache
+
 
 class MiniGLM(nn.Module):
     def __init__(self, cfg: ModelConfig):
@@ -85,6 +91,22 @@ class MiniGLM(nn.Module):
                     aux = aux + a
             loss = loss + self.cfg.moe_aux_weight * aux
         return logits, loss
+
+    def forward_cached(self, idx: torch.Tensor, caches: list, pos: int):
+        """KV-cached forward (EXP-010). idx: (B, Tq); pos = absolute position of these tokens so RoPE is
+        applied correctly. Returns (logits, new_caches). Used by generate_cached for fast decoding."""
+        _, Tq = idx.shape
+        assert pos + Tq <= self.cfg.max_seq_len, "KV-cache run exceeds max_seq_len (grow RoPE cache)"
+        x = self.tok_emb(idx)
+        cos = self.rope_cos[pos : pos + Tq].to(x.dtype)
+        sin = self.rope_sin[pos : pos + Tq].to(x.dtype)
+        new_caches = []
+        for block, cache in zip(self.blocks, caches):
+            x, nc = block.forward_cached(x, cos, sin, cache)
+            new_caches.append(nc)
+        x = self.norm_f(x)
+        logits = self.lm_head(x)
+        return logits, new_caches
 
     def num_params(self, trainable_only: bool = False) -> int:
         params = (p for p in self.parameters() if p.requires_grad or not trainable_only)

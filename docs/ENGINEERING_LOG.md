@@ -429,8 +429,10 @@ grad is on (training only; eval/decode unaffected). Re-run scaling at T ∈ {102
 | 2048 | 23,291 | 5002 | 16,278 | 2796 | 44% |
 | 4096 | **265** | **16,277** | **7,400** | **8,769** | **46%** |
 ### Observation — hypothesis CONFIRMED
-- Checkpointing cut peak training memory **~44–48%** at larger T → saved per-layer activations WERE a
-  major component of the wall (the EXP-009 leading hypothesis is now supported by a direct test).
+- Checkpointing cut peak training memory **~44–48%** at larger T → **strong experimental evidence that
+  saved per-layer activations were a MAJOR contributor** to the wall (EXP-009 hypothesis supported by a
+  direct test). Not a claim they are 100%: the remaining ~8.8 GB still holds params, gradients, optimizer
+  state, some activations, and the MPS runtime/allocator/workspaces.
 - **The T=4096 training wall MOVED:** 265 → **7,400 tok/s (~28× faster) AND half the memory** (16.3→8.8
   GB, now well under 16 GB). The counter-intuitive systems lesson fired exactly: doing MORE compute
   (recompute) is *faster* here because it escapes memory **swap/thrashing**.
@@ -443,3 +445,24 @@ is pushed out: T=4096 is now trainable with headroom (8.8 GB), so the practical 
 ### Next
 EXP-010 (KV cache) for the separate decode-latency wall; then EXP-012 (revisit FP16 at long context —
 activations now dominate, so EXP-006's REVERT may flip). Still Phase B, no cloud.
+
+---
+
+## EXP-010 — Stage 4D: KV cache (PRE-REGISTERED) — close the decode-latency wall
+### Problem (measured in EXP-008)
+`generate()` reprocesses the whole prefix for every new token → decode latency 1.6 ms/tok (T=128) →
+46.4 ms/tok (T=4096). KV cache stores each layer's K/V from the prefill so decode reuses them and only
+computes the new token's q/k/v. (Stage-1 deferral now justified by evidence.)
+### Pre-registered checks (not just "it's faster")
+1. **Correctness:** greedy decode with cache == without cache, **token-for-token**, same weights/prompt.
+   A fast-but-wrong cache is worthless.
+2. **Latency scaling:** decode ms/tok WITH vs WITHOUT cache across T∈{128,512,1024,2048,4096}. Expected
+   story: without-cache latency grows strongly with prompt length; with-cache grows much more slowly.
+3. **Price:** KV cache is NOT free — it trades decode compute for *inference memory*. Report KV-cache
+   bytes per T. Note the opposite tradeoff to EXP-011: checkpointing (compute↑, train-mem↓) vs KV cache
+   (decode-compute↓, inference-mem↑).
+### Sets up (do NOT implement yet)
+Once the cache exists and its size is measured, GQA gets a concrete problem (fewer K/V heads → smaller
+cache). Implement GQA only if KV-cache memory becomes a measured problem.
+### Result / Observation / Decision / Next
+_pending — EXP-010 run_

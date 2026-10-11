@@ -289,6 +289,65 @@ def cmd_amp(args) -> None:
     logger.info(f"DONE | speedup={speedup} dtype_changed={dtype_changed} -> {path}")
 
 
+def cmd_kvcache(args) -> None:
+    """EXP-010 — decode latency with vs without KV cache across context length T, plus cache memory cost."""
+    import time
+
+    import torch
+
+    from .model.generate import generate, generate_cached
+    from .model.transformer import MiniGLM
+
+    T_LIST = [128, 512, 1024, 2048, 4096]
+    GEN = 32
+    logger = get_logger()
+    config = Config.from_yaml(args.config)
+    prov = provenance(args.allow_dirty)
+    set_seed(config.seed)
+    device = resolve_device(config.device)
+    vocab = config.data.vocab_size
+    config.model.vocab_size = vocab
+    hd = config.model.d_model // config.model.n_heads
+    logger.info(f"kvcache | device={device} gen={GEN} T={T_LIST}")
+
+    def sync():
+        if device.type == "mps":
+            torch.mps.synchronize()
+        elif device.type == "cuda":
+            torch.cuda.synchronize()
+
+    results = []
+    for T in T_LIST:
+        config.model.max_seq_len = T + GEN
+        model = MiniGLM(config.model).to(device)
+        prompt = torch.randint(0, vocab, (1, T), device=device)
+
+        generate(model, prompt, max_new_tokens=2)          # warmup
+        generate_cached(model, prompt, max_new_tokens=2)
+        sync()
+        t0 = time.time()
+        generate(model, prompt, max_new_tokens=GEN)
+        sync()
+        no_cache_ms = (time.time() - t0) / GEN * 1000
+        t0 = time.time()
+        generate_cached(model, prompt, max_new_tokens=GEN)
+        sync()
+        cache_ms = (time.time() - t0) / GEN * 1000
+
+        kv_bytes = 2 * config.model.n_layers * config.model.n_heads * (T + GEN) * hd * 4  # fp32, batch 1
+        results.append({"T": T, "no_cache_ms_per_token": no_cache_ms, "cache_ms_per_token": cache_ms,
+                        "speedup": no_cache_ms / cache_ms if cache_ms else None,
+                        "kv_cache_bytes": kv_bytes})
+        logger.info(f"T={T:5d} | no-cache {no_cache_ms:6.1f} | cache {cache_ms:6.1f} ms/tok | "
+                    f"speedup {no_cache_ms/cache_ms:5.1f}x | kv {round(kv_bytes/1e6,1)}MB")
+        del model, prompt
+
+    record = {"experiment": config.experiment + "_kvcache", **prov, "config": config.to_dict(),
+              "device": str(device), "hardware": hardware_info(), "gen_tokens": GEN, "curve": results}
+    path = write_experiment(record)
+    logger.info(f"DONE -> {path}")
+
+
 def cmd_scaling(args) -> None:
     """EXP-008 — measure how dense attention scales with context length T (Stage 4A).
 
@@ -491,6 +550,11 @@ def main() -> None:
     scaling.add_argument("--config", required=True, help="path to a YAML config in configs/")
     scaling.add_argument("--allow-dirty", action="store_true", help="permit a dirty git tree (exploratory, non-reproducible)")
     scaling.set_defaults(func=cmd_scaling)
+
+    kvcache = sub.add_parser("kvcache", help="EXP-010 decode latency with vs without KV cache")
+    kvcache.add_argument("--config", required=True, help="path to a YAML config in configs/")
+    kvcache.add_argument("--allow-dirty", action="store_true", help="permit a dirty git tree (exploratory, non-reproducible)")
+    kvcache.set_defaults(func=cmd_kvcache)
 
     args = parser.parse_args()
     args.func(args)
