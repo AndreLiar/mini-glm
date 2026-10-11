@@ -511,5 +511,27 @@ GradScaler (MPS AMP not turnkey — as in EXP-006; the loss column is a stabilit
 ### Pre-registered outcome map
 FP16 still loses → EXP-006 generalizes · FP16 alone helps → earlier REVERT was short-context-only ·
 checkpoint still dominates → recompute is the better local trade · FP16+ckpt best → local Pareto optimum.
-### Result / Observation / Decision / Next
-_pending — EXP-012 run_
+### Result (MPS, T=4096, batch 8; dtype verified)
+| Config | compute dtype | fwd+bwd tok/s | peak mem | finite |
+|---|---|---:|---:|---|
+| FP32 | float32 | 319 | 16,268 MB | ✓ |
+| FP16 | float16 | 338 | 16,278 MB | ✓ |
+| FP32 + checkpoint | float32 | **8,994** | **8,761 MB** | ✓ |
+| FP16 + checkpoint | float16 | 7,948 | 9,835 MB | ✓ |
+### Observation — the decision did NOT flip (and the pre-registered caution was right)
+- **FP16 alone gave ~0 memory benefit** (16,278 ≈ 16,268 MB) and did not escape swap (338≈319 tok/s). The
+  "half-size ⇒ half memory" assumption is **false here** (dtype confirmed float16, so it DID run fp16).
+  On this autocast-on-MPS path, memory isn't reduced — params/grads/optimizer stay FP32 and MPS adds casts/workspaces.
+- **Checkpointing dominates** (FP32+ckpt: 8,761 MB, 8,994 tok/s = the Pareto winner, escapes swap).
+- **FP16 + checkpoint did NOT compound — it was worse** (9,835 MB > 8,761; 7,948 < 8,994 tok/s): fp16 added
+  casts/workspaces on top of checkpointing.
+### Decision
+**FP16 REVERT confirmed — across BOTH regimes.** The EXP-006 short-context REVERT did not flip at long
+context; the long-context memory fix is **recompute (checkpointing)**, not precision. Local Pareto
+optimum = **FP32 + activation checkpointing**. Scope caveat: this is specific to `torch.autocast` on MPS
+without a GradScaler / true half-precision storage — on CUDA with proper AMP or real bf16 weights the
+answer could differ (not tested here). The *intended* lesson (decisions are regime-dependent) still
+landed — we just found that THIS decision happens to be robust, with a measured reason.
+### Next
+Wrap Stage 4 (summary report). Attention/long-context story complete: 2 walls found, 2 REVERTs, 2 WINs.
+Deferred (with triggers): GQA (if KV cache grows), real bf16/CUDA AMP (different backend), cloud (none needed).

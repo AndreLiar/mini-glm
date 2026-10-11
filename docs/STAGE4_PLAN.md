@@ -1,4 +1,9 @@
-# Stage 4 Plan — Attention & long context
+# Stage 4 Plan — Attention & long context  ✅ COMPLETE (see docs/reports/stage4_summary.md)
+
+> Done: EXP-008 (found 2 walls) · EXP-009 sliding-window REVERT · EXP-011 checkpointing KEEP ·
+> EXP-010 KV cache KEEP · EXP-012 FP16 REVERT (confirmed). Local Pareto optimum: FP32 + checkpointing;
+> KV cache for decode. Still Phase B (no cloud).
+
 
 Structured around a **question**, not around implementing trendy attention variants:
 

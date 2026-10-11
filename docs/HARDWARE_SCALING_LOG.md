@@ -110,3 +110,15 @@ The hardware ceiling moved: 4096 now trains with headroom. Still Phase B (local)
 **WIN:** no-cache latency grows ~linearly with context; cached latency is ~flat **over the measured
 range** (~1 ms/tok, not constant forever) → up to 12× at T=4096. **Opposite tradeoff to checkpointing:** KV cache spends *inference memory* (grows linearly
 with T, 17 MB at 4096) to save *decode compute*. GQA (shrinks cache) not yet justified — cache is tiny here.
+
+## EXP-012 — FP32/FP16 x checkpoint at T=4096 (batch 8)
+| config | compute dtype | tok/s | mem MB |
+|---|---|--:|--:|
+| FP32 | float32 | 319 | 16,268 |
+| FP16 | float16 | 338 | 16,278 |
+| FP32+ckpt | float32 | 8,994 | 8,761 |
+| FP16+ckpt | float16 | 7,948 | 9,835 |
+
+**Finding:** FP16 (autocast/MPS) gave ~0 memory benefit (16.3 GB either way) and hurt when combined with
+checkpointing. Local Pareto optimum = **FP32 + checkpointing**. The EXP-006 FP16 REVERT holds across
+regimes (scope: autocast-on-MPS without GradScaler/true half-precision storage; CUDA AMP/bf16 may differ).

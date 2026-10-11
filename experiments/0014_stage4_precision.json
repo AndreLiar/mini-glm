@@ -1,0 +1,104 @@
+{
+  "experiment": "stage4_precision",
+  "git_commit": "e511ef909258e92e08bdfd7a7bdf6ae80dfe8f2e",
+  "git_dirty": false,
+  "reproducible": true,
+  "config": {
+    "experiment": "stage3_dense",
+    "seed": 0,
+    "device": "auto",
+    "model": {
+      "vocab_size": 1024,
+      "d_model": 128,
+      "n_layers": 4,
+      "n_heads": 4,
+      "d_ff": 256,
+      "max_seq_len": 4096,
+      "rope_theta": 10000.0,
+      "attn_type": "causal",
+      "sliding_window": 256,
+      "activation_checkpointing": true,
+      "ffn_type": "dense",
+      "n_experts": 8,
+      "moe_top_k": 2,
+      "moe_aux_weight": 0.01
+    },
+    "train": {
+      "steps": 1500,
+      "batch_size": 32,
+      "accum_steps": 1,
+      "seq_len": 128,
+      "lr": 0.0005,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "eval_interval": 100,
+      "eval_batches": 40
+    },
+    "data": {
+      "source": "book",
+      "val_fraction": 0.1,
+      "test_fraction": 0.1,
+      "path": "data/corpus/pride_and_prejudice.txt",
+      "vocab_size": 1024
+    },
+    "toy": {
+      "input_dim": 16,
+      "output_dim": 4,
+      "n_samples": 512,
+      "noise_std": 0.05,
+      "batch_size": 32,
+      "steps": 300,
+      "lr": 0.05
+    }
+  },
+  "device": "mps",
+  "hardware": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "python": "3.12.8"
+  },
+  "T": 4096,
+  "batch": 8,
+  "grid": [
+    {
+      "config": "fp32",
+      "fp16": false,
+      "checkpoint": false,
+      "compute_dtype": "torch.float32",
+      "fwdbwd_tok_s": 319.1012655052611,
+      "peak_driver_bytes": 16268378112,
+      "finite": true,
+      "result": "OK"
+    },
+    {
+      "config": "fp32+ckpt",
+      "fp16": false,
+      "checkpoint": true,
+      "compute_dtype": "torch.float32",
+      "fwdbwd_tok_s": 8993.622323617914,
+      "peak_driver_bytes": 8760573952,
+      "finite": true,
+      "result": "OK"
+    },
+    {
+      "config": "fp16",
+      "fp16": true,
+      "checkpoint": false,
+      "compute_dtype": "torch.float16",
+      "fwdbwd_tok_s": 338.18446651849246,
+      "peak_driver_bytes": 16277815296,
+      "finite": true,
+      "result": "OK"
+    },
+    {
+      "config": "fp16+ckpt",
+      "fp16": true,
+      "checkpoint": true,
+      "compute_dtype": "torch.float16",
+      "fwdbwd_tok_s": 7948.159922312853,
+      "peak_driver_bytes": 9835364352,
+      "finite": true,
+      "result": "OK"
+    }
+  ]
+}
