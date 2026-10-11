@@ -1,0 +1,23 @@
+# EXP-011: dense causal + activation checkpointing. Identical to stage3_dense except checkpointing on.
+experiment: stage4_checkpoint
+seed: 0
+device: auto
+model:
+  d_model: 128
+  n_layers: 4
+  n_heads: 4
+  d_ff: 256
+  max_seq_len: 128
+  attn_type: causal
+  activation_checkpointing: true
+  ffn_type: dense
+train:
+  steps: 1500
+  batch_size: 32
+  seq_len: 128
+  lr: 0.0005
+  eval_interval: 100
+  eval_batches: 40
+data:
+  source: book
+  vocab_size: 1024

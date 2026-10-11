@@ -11,6 +11,7 @@ it saves vocab_size * d_model parameters.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.checkpoint import checkpoint
 
 from ..config import ModelConfig
 from .interfaces import build_attention, build_feedforward
@@ -64,8 +65,13 @@ class MiniGLM(nn.Module):
         x = self.tok_emb(idx)
         cos = self.rope_cos[:T].to(x.dtype)
         sin = self.rope_sin[:T].to(x.dtype)
+        use_ckpt = self.cfg.activation_checkpointing and torch.is_grad_enabled()
         for block in self.blocks:
-            x = block(x, cos, sin)
+            if use_ckpt:
+                # recompute this block's activations in backward instead of storing them (EXP-011)
+                x = checkpoint(block, x, cos, sin, use_reentrant=False)
+            else:
+                x = block(x, cos, sin)
         x = self.norm_f(x)
         logits = self.lm_head(x)
         loss = None

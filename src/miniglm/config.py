@@ -37,6 +37,7 @@ class ModelConfig:
     rope_theta: float = 10000.0
     attn_type: str = "causal"      # "causal" | "sliding"
     sliding_window: int = 256      # window W used when attn_type == "sliding" (Stage 4C)
+    activation_checkpointing: bool = False  # recompute block activations in backward (Stage 4, EXP-011)
     ffn_type: str = "dense"        # "dense" | "moe"
     # Mixture-of-Experts (used when ffn_type == "moe"; ADR 0009)
     n_experts: int = 8

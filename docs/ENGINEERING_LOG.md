@@ -385,10 +385,11 @@ training wall actually moves.
 The T=4096 training wall did **not** move (still ~16 GB → still saturates the machine). Throughput at 4096
 was less brutal (4,694 vs 265 tok/s) but still deep in the swap regime (vs 23k at 2048).
 ### Observation
-Confirms the band-mask trap AND, more importantly, **the wall is activation-dominated, not
-attention-score-dominated.** SDPA (flash) already avoided materializing the O(T²) score matrix in the
-dense case, so there was little attention memory for a window to save; the memory is the per-layer
-activations (Q/K/V, FFN, residuals = O(T·d)·layers), which sliding-window does NOT reduce.
+Confirms the band-mask trap: making attention local did **not** materially reduce peak training memory on
+this SDPA/MPS path. **Therefore the dominant memory cost is elsewhere in the training graph** — with
+**saved per-layer activations as the leading hypothesis** (SDPA/flash already avoided the O(T²) score
+matrix, so a window had little attention memory to save). This is a hypothesis EXP-011 will *test*, not
+yet a proven fact.
 ### Decision
 **Sliding-window REVERT as a memory fix** (it does not solve the training wall). Keep it available
 (valid local semantics; marginally faster at long T) behind `attn_type: sliding`. The correct next
@@ -398,3 +399,25 @@ and both correctly narrowed the diagnosis.)
 ### Next
 EXP-011 (activation checkpointing) to actually move the training-memory wall; and/or EXP-010 (KV cache)
 to move the separate decode-latency wall. Both are likely wins.
+
+---
+
+## EXP-011 — Stage 4C: activation checkpointing (PRE-REGISTERED, falsifiable)
+### Hypothesis (to be tested, NOT assumed)
+IF saved per-layer activations dominate the T=4096 training wall, THEN checkpointing TransformerBlocks
+(recompute activations in backward instead of storing them) should materially reduce peak training
+memory and move T=4096 out of the swap regime. If memory barely drops, the wall is dominated by
+something else (MPS driver/workspace, allocator) — also a useful result.
+### Baseline
+Dense causal, T=4096, batch 8, FP32: ~16.3 GB, ~265 fwd+bwd tok/s (EXP-008).
+### Method
+Wrap each block in `torch.utils.checkpoint(block, x, cos, sin, use_reentrant=False)` when enabled and
+grad is on (training only; eval/decode unaffected). Re-run scaling at T ∈ {1024, 2048, 4096}.
+### Acceptance
+- Correctness: checkpoint ON vs OFF → identical logits/loss and gradients within tolerance (same math,
+  different memory strategy).
+- Systems (the real bar): **T=4096 becomes operationally usable** (escapes swap) without changing
+  semantics. Note the non-obvious possibility: more FLOPs (recompute) can be *faster* if it avoids
+  memory thrashing. Report a memory + tok/s table; decide KEEP/REVERT on evidence (don't pre-promise a win).
+### Result / Observation / Decision / Next
+_pending — EXP-011 run_
