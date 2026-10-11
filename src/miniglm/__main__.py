@@ -299,7 +299,8 @@ def cmd_kvcache(args) -> None:
     from .model.transformer import MiniGLM
 
     T_LIST = [128, 512, 1024, 2048, 4096]
-    GEN = 32
+    GEN = 64
+    WARMUP = 8
     logger = get_logger()
     config = Config.from_yaml(args.config)
     prov = provenance(args.allow_dirty)
@@ -322,17 +323,22 @@ def cmd_kvcache(args) -> None:
         model = MiniGLM(config.model).to(device)
         prompt = torch.randint(0, vocab, (1, T), device=device)
 
-        generate(model, prompt, max_new_tokens=2)          # warmup
-        generate_cached(model, prompt, max_new_tokens=2)
+        generate(model, prompt, max_new_tokens=WARMUP)      # warmup (kernel compile/alloc)
+        generate_cached(model, prompt, max_new_tokens=WARMUP)
         sync()
-        t0 = time.time()
-        generate(model, prompt, max_new_tokens=GEN)
-        sync()
-        no_cache_ms = (time.time() - t0) / GEN * 1000
-        t0 = time.time()
-        generate_cached(model, prompt, max_new_tokens=GEN)
-        sync()
-        cache_ms = (time.time() - t0) / GEN * 1000
+
+        def timeit(fn):  # best-of-2 ms/token, to shed cold-start/MPS launch spikes
+            best = float("inf")
+            for _ in range(2):
+                sync()
+                t0 = time.time()
+                fn()
+                sync()
+                best = min(best, time.time() - t0)
+            return best / GEN * 1000
+
+        no_cache_ms = timeit(lambda: generate(model, prompt, max_new_tokens=GEN))
+        cache_ms = timeit(lambda: generate_cached(model, prompt, max_new_tokens=GEN))
 
         kv_bytes = 2 * config.model.n_layers * config.model.n_heads * (T + GEN) * hd * 4  # fp32, batch 1
         results.append({"T": T, "no_cache_ms_per_token": no_cache_ms, "cache_ms_per_token": cache_ms,
