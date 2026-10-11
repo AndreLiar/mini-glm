@@ -289,6 +289,88 @@ def cmd_amp(args) -> None:
     logger.info(f"DONE | speedup={speedup} dtype_changed={dtype_changed} -> {path}")
 
 
+def cmd_precision(args) -> None:
+    """EXP-012 — Pareto table at T=4096: FP32 / FP16 / +checkpoint, measuring whether the EXP-006 FP16
+    REVERT flips in the long-context (activation-dominated) regime."""
+    import math
+    import time
+    from contextlib import nullcontext
+
+    import torch
+
+    from .model.transformer import MiniGLM
+
+    T, BATCH = 4096, 8
+    logger = get_logger()
+    config = Config.from_yaml(args.config)
+    prov = provenance(args.allow_dirty)
+    set_seed(config.seed)
+    device = resolve_device(config.device)
+    vocab = config.data.vocab_size
+    config.model.vocab_size = vocab
+    config.model.max_seq_len = T
+    logger.info(f"precision | device={device} T={T} batch={BATCH} (FP32/FP16 x checkpoint)")
+
+    def amp_ctx(fp16):
+        if not fp16:
+            return nullcontext()
+        return torch.autocast(device_type=device.type,
+                              dtype=torch.bfloat16 if device.type == "cpu" else torch.float16)
+
+    def sync():
+        if device.type == "mps":
+            torch.mps.synchronize()
+        elif device.type == "cuda":
+            torch.cuda.synchronize()
+
+    results = []
+    for fp16 in [False, True]:
+        for ckpt in [False, True]:
+            label = ("fp16" if fp16 else "fp32") + ("+ckpt" if ckpt else "")
+            try:
+                if device.type == "mps":
+                    torch.mps.empty_cache()
+                config.model.activation_checkpointing = ckpt
+                set_seed(config.seed)
+                model = MiniGLM(config.model).to(device)
+                opt = torch.optim.AdamW(model.parameters(), lr=1e-4)
+                x = torch.randint(0, vocab, (BATCH, T), device=device)
+
+                with torch.no_grad(), amp_ctx(fp16):
+                    probe, _ = model(x[:, :8])
+                dtype = str(probe.dtype)
+
+                def step():
+                    opt.zero_grad(set_to_none=True)
+                    with amp_ctx(fp16):
+                        _, loss = model(x, x)
+                    loss.backward()
+                    opt.step()
+                    return loss
+
+                step()  # one warmup
+                sync()
+                t0 = time.time()
+                last = step()
+                sync()
+                tok_s = BATCH * T / (time.time() - t0)
+                mem = int(torch.mps.driver_allocated_memory()) if device.type == "mps" else None
+                results.append({"config": label, "fp16": fp16, "checkpoint": ckpt, "compute_dtype": dtype,
+                                "fwdbwd_tok_s": tok_s, "peak_driver_bytes": mem,
+                                "finite": math.isfinite(last.item()), "result": "OK"})
+                logger.info(f"{label:11} | dtype {dtype:14} | {tok_s:>8,.0f} tok/s | "
+                            f"mem {None if mem is None else round(mem/1e6)}MB | finite {math.isfinite(last.item())}")
+                del model, opt, x
+            except Exception as e:
+                results.append({"config": label, "result": "FAIL", "error": f"{type(e).__name__}: {e}"})
+                logger.info(f"{label:11} | FAIL {type(e).__name__}: {e}")
+
+    record = {"experiment": "stage4_precision", **prov, "config": config.to_dict(),
+              "device": str(device), "hardware": hardware_info(), "T": T, "batch": BATCH, "grid": results}
+    path = write_experiment(record)
+    logger.info(f"DONE -> {path}")
+
+
 def cmd_kvcache(args) -> None:
     """EXP-010 — decode latency with vs without KV cache across context length T, plus cache memory cost."""
     import time
@@ -561,6 +643,11 @@ def main() -> None:
     kvcache.add_argument("--config", required=True, help="path to a YAML config in configs/")
     kvcache.add_argument("--allow-dirty", action="store_true", help="permit a dirty git tree (exploratory, non-reproducible)")
     kvcache.set_defaults(func=cmd_kvcache)
+
+    precision = sub.add_parser("precision", help="EXP-012 FP32/FP16 x checkpoint Pareto at T=4096")
+    precision.add_argument("--config", required=True, help="path to a YAML config in configs/")
+    precision.add_argument("--allow-dirty", action="store_true", help="permit a dirty git tree (exploratory, non-reproducible)")
+    precision.set_defaults(func=cmd_precision)
 
     args = parser.parse_args()
     args.func(args)

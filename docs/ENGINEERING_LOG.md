@@ -474,9 +474,10 @@ cache). Implement GQA only if KV-cache memory becomes a measured problem.
 | 4096 | 18.64 | 1.56 | **12.0×** | 17.0 MB |
 ### Observation
 - **The defining KV-cache property, measured:** no-cache decode latency GROWS ~linearly with context
-  (1.40→18.64 ms/tok, ~13×, because it reprocesses the whole prefix each token); cached decode stays
-  **≈ flat** (~0.9–1.6 ms/tok) regardless of T (it processes only the new token). Speedup therefore
-  grows with context: 1.6×→**12×** at 4096.
+  (1.40→18.64 ms/tok, ~13×, because it reprocesses the whole prefix each token); cached decode is
+  **≈ flat over the measured range** (~0.9–1.6 ms/tok) — NOT constant forever (at larger models/context,
+  attention over the cached K/V and memory bandwidth still grow), but a convincing practical flattening
+  here. Speedup therefore grows with context: 1.6×→**12×** at 4096.
 - **The price (opposite tradeoff to EXP-011):** KV-cache memory grows linearly with T (0.8→17.0 MB).
   Checkpointing = compute↑ / train-mem↓; KV cache = decode-compute↓ / inference-mem↑.
 - Correctness proven separately: cached greedy == no-cache greedy token-for-token (tests).
@@ -489,3 +490,26 @@ only if a larger model/batch/context makes KV memory a measured problem.
 ### Next
 EXP-012 — revisit FP16 at long context (EXP-006 REVERT was conditional; activations now dominate, so
 build a Pareto table FP32 / FP16 / checkpoint / checkpoint+FP16 at T=4096). Then reassess Stage 4 / hardware.
+
+---
+
+## EXP-012 — Stage 4: revisit mixed precision at long context (PRE-REGISTERED)
+### Question
+EXP-006 REVERTed FP16 at SHORT context (useless there). At T=4096 activations dominate memory — does the
+earlier decision FLIP? (Tests the principle: a correct decision can be regime-dependent.)
+### Design (fixed before running), all at T=4096, same model/batch/backend/method
+| Config | Question |
+|---|---|
+| FP32 | current long-context baseline |
+| FP16 (autocast) | does lower precision ALONE avoid the wall? |
+| FP32 + checkpoint | known-good memory fix (EXP-011) |
+| FP16 + checkpoint | do the two optimizations compound? |
+Measure per config: peak driver memory, fwd+bwd tok/s, finite loss / stability, **actual compute dtype**,
+whether it escapes swap. **Caution:** do NOT assume half-size numbers → half memory — AMP may leave
+params/optimizer/some ops in FP32 and MPS may add casts/workspaces. Let the measurement decide. No
+GradScaler (MPS AMP not turnkey — as in EXP-006; the loss column is a stability check).
+### Pre-registered outcome map
+FP16 still loses → EXP-006 generalizes · FP16 alone helps → earlier REVERT was short-context-only ·
+checkpoint still dominates → recompute is the better local trade · FP16+ckpt best → local Pareto optimum.
+### Result / Observation / Decision / Next
+_pending — EXP-012 run_

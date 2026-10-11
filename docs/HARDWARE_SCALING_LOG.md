@@ -107,6 +107,6 @@ The hardware ceiling moved: 4096 now trains with headroom. Still Phase B (local)
 | 2048 | 7.68 | 0.91 | 8.4× | 8.7 MB |
 | 4096 | 18.64 | 1.56 | 12.0× | 17.0 MB |
 
-**WIN:** no-cache latency grows ~linearly with context; cached latency is ~flat (~1 ms/tok) → up to 12×
-at T=4096. **Opposite tradeoff to checkpointing:** KV cache spends *inference memory* (grows linearly
+**WIN:** no-cache latency grows ~linearly with context; cached latency is ~flat **over the measured
+range** (~1 ms/tok, not constant forever) → up to 12× at T=4096. **Opposite tradeoff to checkpointing:** KV cache spends *inference memory* (grows linearly
 with T, 17 MB at 4096) to save *decode compute*. GQA (shrinks cache) not yet justified — cache is tiny here.
