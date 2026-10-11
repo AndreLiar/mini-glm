@@ -1,0 +1,98 @@
+{
+  "experiment": "stage3_dense_kvcache",
+  "git_commit": "c0096afaa4c42ead8446003324145a628c731da8",
+  "git_dirty": false,
+  "reproducible": true,
+  "config": {
+    "experiment": "stage3_dense",
+    "seed": 0,
+    "device": "auto",
+    "model": {
+      "vocab_size": 1024,
+      "d_model": 128,
+      "n_layers": 4,
+      "n_heads": 4,
+      "d_ff": 256,
+      "max_seq_len": 4160,
+      "rope_theta": 10000.0,
+      "attn_type": "causal",
+      "sliding_window": 256,
+      "activation_checkpointing": false,
+      "ffn_type": "dense",
+      "n_experts": 8,
+      "moe_top_k": 2,
+      "moe_aux_weight": 0.01
+    },
+    "train": {
+      "steps": 1500,
+      "batch_size": 32,
+      "accum_steps": 1,
+      "seq_len": 128,
+      "lr": 0.0005,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "eval_interval": 100,
+      "eval_batches": 40
+    },
+    "data": {
+      "source": "book",
+      "val_fraction": 0.1,
+      "test_fraction": 0.1,
+      "path": "data/corpus/pride_and_prejudice.txt",
+      "vocab_size": 1024
+    },
+    "toy": {
+      "input_dim": 16,
+      "output_dim": 4,
+      "n_samples": 512,
+      "noise_std": 0.05,
+      "batch_size": 32,
+      "steps": 300,
+      "lr": 0.05
+    }
+  },
+  "device": "mps",
+  "hardware": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "python": "3.12.8"
+  },
+  "gen_tokens": 64,
+  "curve": [
+    {
+      "T": 128,
+      "no_cache_ms_per_token": 1.4009997248649597,
+      "cache_ms_per_token": 0.8952952921390533,
+      "speedup": 1.5648465228915363,
+      "kv_cache_bytes": 786432
+    },
+    {
+      "T": 512,
+      "no_cache_ms_per_token": 2.539638429880142,
+      "cache_ms_per_token": 1.1315643787384033,
+      "speedup": 2.244360530959467,
+      "kv_cache_bytes": 2359296
+    },
+    {
+      "T": 1024,
+      "no_cache_ms_per_token": 4.0122829377651215,
+      "cache_ms_per_token": 0.8970312774181366,
+      "speedup": 4.472846196972529,
+      "kv_cache_bytes": 4456448
+    },
+    {
+      "T": 2048,
+      "no_cache_ms_per_token": 7.68464058637619,
+      "cache_ms_per_token": 0.9102374315261841,
+      "speedup": 8.442457231726284,
+      "kv_cache_bytes": 8650752
+    },
+    {
+      "T": 4096,
+      "no_cache_ms_per_token": 18.638908863067627,
+      "cache_ms_per_token": 1.5592314302921295,
+      "speedup": 11.95390786829864,
+      "kv_cache_bytes": 17039360
+    }
+  ]
+}

@@ -464,5 +464,28 @@ computes the new token's q/k/v. (Stage-1 deferral now justified by evidence.)
 ### Sets up (do NOT implement yet)
 Once the cache exists and its size is measured, GQA gets a concrete problem (fewer K/V heads → smaller
 cache). Implement GQA only if KV-cache memory becomes a measured problem.
-### Result / Observation / Decision / Next
-_pending — EXP-010 run_
+### Result (MPS, batch 1, greedy, 64 tokens, best-of-2; first run was noisy → bench hardened)
+| T | no-cache ms/tok | cache ms/tok | speedup | KV cache |
+|---:|---:|---:|---:|---:|
+| 128 | 1.40 | 0.90 | 1.6× | 0.8 MB |
+| 512 | 2.54 | 1.13 | 2.2× | 2.4 MB |
+| 1024 | 4.01 | 0.90 | 4.5× | 4.5 MB |
+| 2048 | 7.68 | 0.91 | 8.4× | 8.7 MB |
+| 4096 | 18.64 | 1.56 | **12.0×** | 17.0 MB |
+### Observation
+- **The defining KV-cache property, measured:** no-cache decode latency GROWS ~linearly with context
+  (1.40→18.64 ms/tok, ~13×, because it reprocesses the whole prefix each token); cached decode stays
+  **≈ flat** (~0.9–1.6 ms/tok) regardless of T (it processes only the new token). Speedup therefore
+  grows with context: 1.6×→**12×** at 4096.
+- **The price (opposite tradeoff to EXP-011):** KV-cache memory grows linearly with T (0.8→17.0 MB).
+  Checkpointing = compute↑ / train-mem↓; KV cache = decode-compute↓ / inference-mem↑.
+- Correctness proven separately: cached greedy == no-cache greedy token-for-token (tests).
+- Methodology note: the first run was noisy (MPS kernel-launch spikes on 32-token timing); hardening
+  (8-token warmup, 64 tokens, best-of-2) produced this clean, monotone curve.
+### Decision
+**KEEP KV cache for decoding** — closes the EXP-008 decode-latency wall and the Stage-1 deferral, now on
+evidence. GQA (which shrinks the cache) is **NOT yet justified**: at 17 MB the cache is tiny here; revisit
+only if a larger model/batch/context makes KV memory a measured problem.
+### Next
+EXP-012 — revisit FP16 at long context (EXP-006 REVERT was conditional; activations now dominate, so
+build a Pareto table FP32 / FP16 / checkpoint / checkpoint+FP16 at T=4096). Then reassess Stage 4 / hardware.

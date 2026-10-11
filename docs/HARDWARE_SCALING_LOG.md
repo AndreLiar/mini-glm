@@ -99,3 +99,14 @@ a major part of the wall. **T=4096 moved from unusable (265 tok/s, swap) to 7,40
 Non-obvious lesson: at 4096, doing MORE compute (recompute) is ~28× FASTER because it escapes swap. At
 small T (no pressure) it's ~25–30% slower — regime-dependent, so KEEP only for long-context training.
 The hardware ceiling moved: 4096 now trains with headroom. Still Phase B (local).
+
+## EXP-010 — KV cache: decode latency (ms/token) no-cache vs cache, + cache size
+| T | no-cache | cache | speedup | KV cache |
+|---:|---:|---:|---:|---:|
+| 1024 | 4.01 | 0.90 | 4.5× | 4.5 MB |
+| 2048 | 7.68 | 0.91 | 8.4× | 8.7 MB |
+| 4096 | 18.64 | 1.56 | 12.0× | 17.0 MB |
+
+**WIN:** no-cache latency grows ~linearly with context; cached latency is ~flat (~1 ms/tok) → up to 12×
+at T=4096. **Opposite tradeoff to checkpointing:** KV cache spends *inference memory* (grows linearly
+with T, 17 MB at 4096) to save *decode compute*. GQA (shrinks cache) not yet justified — cache is tiny here.
