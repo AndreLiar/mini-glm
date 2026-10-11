@@ -35,7 +35,8 @@ class ModelConfig:
     d_ff: int = 256                # SwiGLU hidden width
     max_seq_len: int = 128
     rope_theta: float = 10000.0
-    attn_type: str = "causal"      # Stage 4 will add "gqa", "sliding", ...
+    attn_type: str = "causal"      # "causal" | "sliding"
+    sliding_window: int = 256      # window W used when attn_type == "sliding" (Stage 4C)
     ffn_type: str = "dense"        # "dense" | "moe"
     # Mixture-of-Experts (used when ffn_type == "moe"; ADR 0009)
     n_experts: int = 8

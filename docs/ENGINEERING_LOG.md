@@ -340,20 +340,35 @@ Compute/latency rise with T; memory may rise sub-quadratically thanks to SDPA's 
 | 1024 | 301,683 | 40,270 | 4.3 | 2,243 |
 | 2048 | 260,880 | 23,291 | 8.4 | 5,002 |
 | 4096 | 212,921 | **265** | 46.4 | **16,277** |
-### Observation
-- **Prediction confirmed, T² refuted for memory.** Forward COMPUTE stayed ~flat (256–302k tok/s) — SDPA
-  is fused, it does NOT materialize the T×T matrix. Memory grew **~linearly** (~2× per doubling), FAR
-  below the naive T² (which would demand ~1024× = ~110 GB at 4096; actual ~16 GB ≈ 150×). "Measure,
-  don't assume" paid off exactly here.
-- **The measured wall = TRAINING at T=4096.** Peak memory ~16.3 GB saturates the 16 GB machine → swap →
-  fwd+bwd throughput **collapses ~88×** (23,291 → 265 tok/s) and decode jumps to 46 ms/tok. It is the
-  **backward pass** (stored activations) that breaks first: forward/inference at 4096 still runs (213k tok/s).
-- Practical ceiling on this M3: train comfortably to **T≈1024**, usable-but-slow at **2048**, wall at **4096**.
+### Observation (corrected after review — precise claims only)
+- **The naive T²-memory-MATERIALIZATION model is refuted for PyTorch SDPA on MPS** — NOT the textbook.
+  Dense attention still has quadratic *pairwise compute* in theory; the fused SDPA backend simply avoids
+  storing the full T×T matrix. Forward compute stayed ~flat (256–302k tok/s).
+- Memory grew **far below the naive quadratic** (T² would predict ~1024×≈110 GB at 4096; actual ~16 GB),
+  but **non-linearly** with a sharp escalation 2048→4096 (×2.05, ×5.29, ×1.92, ×2.23, **×3.25**). Causes
+  (saved activations vs allocator/driver caching vs unified-memory pressure vs swap) are **not isolated**.
+- **The measured wall = TRAINING at T=4096** (this config only — see below). Peak driver memory ~16.3 GB
+  saturates the 16 GB machine → swap → fwd+bwd **collapses ~88×** (23,291→265 tok/s). The **backward**
+  pass (stored activations) breaks first.
+- **Two separate problems surfaced, do not conflate:** (A) training/backward **memory** (→ sliding-window
+  / activation checkpointing); (B) autoregressive **decode latency** 1.6→46.4 ms/tok (625→22 tok/s) — our
+  generate() still has **no KV cache**, so this is now the measured trigger for KV caching (Stage 1 deferral fires).
+- What stays viable at 4096 is **batched prefill** (~213k tok/s), NOT decode. "Inference is fine" was wrong.
 ### Decision
-The wall is real and **memory-driven at long context during training** (not compute, not the MoE-style
-dispatch issue). This JUSTIFIES Stage 4C: introduce **sliding-window attention** (O(T·W) memory) as the
-smallest intervention to push the trainable-context wall back, measured against this curve. (GQA mainly
-helps decode/KV-cache memory — a different axis; lower priority for this training-memory wall.)
+The wall is real, config-specific, and **memory-driven for long-context training**. Fork Stage 4:
+**4C — sliding-window attention** (does local attention move the *training* wall?) and **4D — KV cache**
+(does caching move the *decode* wall?). Caveat for 4C: a band *mask* via SDPA may keep dense compute, so
+4C must prove BOTH local semantics AND a material systems improvement. If sliding-window doesn't fix the
+training wall, the next smallest step is **activation checkpointing** (the wall may be activation-, not
+attention-, dominated) — not cloud yet. EXP-006's mixed-precision REVERT was **conditional**; at long
+context activations dominate, so it should be retested later (memory economics changed).
+### Precise wall statement (not "M3 max context = 4096")
+With a **4-layer d128 FP32 model, batch 8, PyTorch SDPA/MPS**, training hits the unified-memory wall at
+**T≈4096**. The wall is a point in {params, batch, T, precision, layers, width, optimizer, backend}; e.g.
+batch 1 might train 4096, batch 16 might fail earlier.
+### Hardware phase
+**Phase A complete; Phase B (local-constrained) entered at EXP-008.** Do NOT scale to cloud yet — several
+local optimization experiments remain (sliding-window, KV cache, activation checkpointing, bf16 retest).
 ### Next
-Stage 4C — implement sliding-window attention behind the `attn_type` factory; re-run this scaling curve
-with it and show the T=4096 training wall move. Standard causal stays the baseline.
+EXP-009 (Stage 4C) — sliding-window attention: prove local semantics AND measure whether the T=4096
+training wall actually moves.

@@ -67,9 +67,12 @@ Optimized grouped-GEMM / fused MoE kernels are what solve this; out of scope her
 | 2048 | 260,880 | 23,291 | 8.4 | 5,002 | usable, slow |
 | 4096 | 212,921 | **265** | 46.4 | **16,277** | **WALL (training): 16 GB saturated → swap → ~88× collapse** |
 
-**THE FIRST REAL HARDWARE WALL (answers "is the M3 the limit?"):** yes — for *training at long context*.
-At T=4096 peak memory (~16.3 GB) saturates the 16 GB machine and the backward pass collapses ~88×.
-Forward/inference at 4096 still runs (213k tok/s) — it's the stored-activation memory of the *backward*
-pass that breaks first. Memory grew ~linearly in T (SDPA avoids the O(T²) matrix), but near-linear growth
-still hits the ceiling at 4096. Practical ceiling: train to T≈1024 comfortably, 2048 slow, 4096 = wall.
-This is the measured justification for sliding-window attention (Stage 4C), O(T·W) memory.
+**FIRST REAL HARDWARE WALL — Phase A complete, Phase B entered at EXP-008.** Precise statement (NOT
+"M3 max context = 4096"): with a 4-layer d128 **FP32, batch 8**, SDPA/MPS model, **training** hits the
+unified-memory wall at **T≈4096** (~16.3 GB → swap → fwd+bwd collapses ~88×). The **backward** pass
+(stored activations) breaks first; batched **prefill** at 4096 still runs (213k tok/s) but autoregressive
+**decode** degrades badly (1.6→46.4 ms/tok ≈ 625→22 tok/s). Memory is **far below naive T²** (SDPA avoids
+the T×T matrix) but grows **non-linearly** (sharp ×3.25 jump 2048→4096); causes not yet isolated. The
+wall is a point in {params, batch, T, precision, layers, width, optimizer, backend}. Two independent
+problems: (A) training memory → sliding-window / **activation checkpointing**; (B) decode latency → **KV
+cache**. Stay local (Phase B); cloud only if a required experiment proves unanswerable here.

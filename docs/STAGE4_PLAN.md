@@ -20,15 +20,35 @@ Do NOT decide in advance what breaks. It could be OOM, throughput collapse, an M
 unacceptable training time — or SDPA may scale better than the textbook O(T²) memory story suggests.
 Name the measured wall; that becomes the motivation (or not) for 4C.
 
-## 4C — introduce alternatives ONLY to address the measured wall
-Smallest intervention first, and understand what each actually solves:
-- **GQA** (grouped-query attention): fewer K/V heads → smaller KV-cache / decode memory. Does **not**
-  remove quadratic *prefill* attention.
-- **Sliding-window attention**: limits each token to a window W → changes complexity O(T²) → **O(T·W)**.
-  Most directly attacks the long-context wall.
-- **Sparse attention** / possibly one **linear-attention** experiment: further complexity reductions.
-Each goes behind the existing `attn_type` factory (standard causal stays the baseline), and each is
-measured against 4A's curve on: correctness, memory, throughput, sequence-length scaling, val quality.
+## 4B result (EXP-008): TWO separate walls → fork Stage 4
+- **(A) training memory** (backward activations) → wall at T≈4096 (this config). Addressed by 4C
+  sliding-window and/or activation checkpointing.
+- **(B) decode latency** (no KV cache, reprocesses context every token: 1.6→46.4 ms/tok) → addressed by 4D.
+
+## 4C — sliding-window attention (EXP-009): does local attention move the TRAINING wall?
+Window W=256, same T sweep. Behind the `attn_type` factory (`sliding`); standard causal stays baseline.
+**Dual acceptance — BOTH required (this is the trap):**
+1. **Semantics (correctness):** a token cannot attend outside its window.
+   - T ≤ W → sliding output ≈ dense causal output (window covers all history).
+   - locality: at position p, changing a token **> W back MUST NOT** change p's output; changing one
+     **within W MAY** change it.
+2. **Systems:** memory/latency scaling **materially improves** with T vs the EXP-008 dense curve.
+   ⚠️ A band *mask* fed to SDPA may still run dense internally (even materialize the T×T mask) → memory
+   may NOT improve or may get worse. Passing (1) alone does NOT complete 4C. If (2) fails, that is itself
+   a valid finding ("mask-only preserves semantics but not systems scaling on MPS").
+**Re-run EXP-008 identically, changing ONLY `attn_type: causal → sliding`**, and produce a dense-vs-sliding
+table (train tok/s + peak mem per T). Then state plainly whether the wall moved.
+Note: the wall may be **activation-dominated**, not attention-dominated — sliding-window might not fix it.
+If so, next smallest step = **activation checkpointing (EXP-011)**, not cloud.
+
+## Roadmap (evidence-driven, local first)
+- EXP-009 / 4C — sliding-window → training-memory wall?
+- EXP-010 / 4D — **KV cache** → decode-latency wall? (Stage-1 deferral now triggered by EXP-008)
+- EXP-011 — activation checkpointing → reduce backward activation memory further (if still above limit)
+- EXP-012 — **revisit mixed precision** at long context (EXP-006 REVERT was conditional; activations now
+  dominate, so memory economics changed)
+- Only after these, if a required experiment still can't run here → scale out.
+Also available (lower priority for these walls): GQA (fewer K/V heads → decode/KV memory), sparse/linear attention.
 
 ## Pre-registered reporting (EXP-008)
 A table: T · forward tok/s · fwd+bwd tok/s · peak driver MB · decode latency · result (OK/SLOW/FAIL),

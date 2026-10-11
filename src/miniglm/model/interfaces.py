@@ -8,14 +8,15 @@ based on the config string. This is what lets an experiment change a single conf
 import torch.nn as nn
 
 from ..config import ModelConfig
-from .attention import CausalSelfAttention
+from .attention import CausalSelfAttention, SlidingWindowAttention
 from .feedforward import SwiGLU
 
 
 def build_attention(cfg: ModelConfig) -> nn.Module:
     if cfg.attn_type == "causal":
         return CausalSelfAttention(cfg)
-    # Stage 4 will register "gqa", "sliding", etc. here.
+    if cfg.attn_type == "sliding":
+        return SlidingWindowAttention(cfg)
     raise ValueError(f"Unknown attn_type: {cfg.attn_type!r}")
 
 
