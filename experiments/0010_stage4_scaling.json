@@ -1,0 +1,116 @@
+{
+  "experiment": "stage4_scaling",
+  "git_commit": "a51cebef26f9fed267bcb386555b8c93c742f329",
+  "git_dirty": false,
+  "reproducible": true,
+  "config": {
+    "experiment": "stage4_sliding",
+    "seed": 0,
+    "device": "auto",
+    "model": {
+      "vocab_size": 1024,
+      "d_model": 128,
+      "n_layers": 4,
+      "n_heads": 4,
+      "d_ff": 256,
+      "max_seq_len": 4096,
+      "rope_theta": 10000.0,
+      "attn_type": "sliding",
+      "sliding_window": 256,
+      "ffn_type": "dense",
+      "n_experts": 8,
+      "moe_top_k": 2,
+      "moe_aux_weight": 0.01
+    },
+    "train": {
+      "steps": 1500,
+      "batch_size": 32,
+      "accum_steps": 1,
+      "seq_len": 128,
+      "lr": 0.0005,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "eval_interval": 100,
+      "eval_batches": 40
+    },
+    "data": {
+      "source": "book",
+      "val_fraction": 0.1,
+      "test_fraction": 0.1,
+      "path": "data/corpus/pride_and_prejudice.txt",
+      "vocab_size": 1024
+    },
+    "toy": {
+      "input_dim": 16,
+      "output_dim": 4,
+      "n_samples": 512,
+      "noise_std": 0.05,
+      "batch_size": 32,
+      "steps": 300,
+      "lr": 0.05
+    }
+  },
+  "device": "mps",
+  "hardware": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "python": "3.12.8"
+  },
+  "batch": 8,
+  "curve": [
+    {
+      "T": 128,
+      "forward_tok_s": 161001.3006155207,
+      "fwdbwd_tok_s": 84639.23696013747,
+      "decode_ms_per_token": 1.4787614345550537,
+      "peak_driver_bytes": 107708416,
+      "t2_relative": 1.0,
+      "result": "OK"
+    },
+    {
+      "T": 256,
+      "forward_tok_s": 266021.3125882615,
+      "fwdbwd_tok_s": 73131.34448616114,
+      "decode_ms_per_token": 1.32712721824646,
+      "peak_driver_bytes": 220954624,
+      "t2_relative": 4.0,
+      "result": "OK"
+    },
+    {
+      "T": 512,
+      "forward_tok_s": 293789.488891321,
+      "fwdbwd_tok_s": 58922.05829555502,
+      "decode_ms_per_token": 2.642512321472168,
+      "peak_driver_bytes": 1202421760,
+      "t2_relative": 16.0,
+      "result": "OK"
+    },
+    {
+      "T": 1024,
+      "forward_tok_s": 242043.28330409914,
+      "fwdbwd_tok_s": 39441.571926202836,
+      "decode_ms_per_token": 6.271660327911377,
+      "peak_driver_bytes": 2242609152,
+      "t2_relative": 64.0,
+      "result": "OK"
+    },
+    {
+      "T": 2048,
+      "forward_tok_s": 183825.47343979884,
+      "fwdbwd_tok_s": 23314.88509867578,
+      "decode_ms_per_token": 19.28010582923889,
+      "peak_driver_bytes": 5036015616,
+      "t2_relative": 256.0,
+      "result": "OK"
+    },
+    {
+      "T": 4096,
+      "forward_tok_s": 121565.94248287944,
+      "fwdbwd_tok_s": 4693.736051303144,
+      "decode_ms_per_token": 128.8241147994995,
+      "peak_driver_bytes": 15739879424,
+      "t2_relative": 1024.0,
+      "result": "OK"
+    }
+  ]
+}

@@ -372,3 +372,29 @@ local optimization experiments remain (sliding-window, KV cache, activation chec
 ### Next
 EXP-009 (Stage 4C) — sliding-window attention: prove local semantics AND measure whether the T=4096
 training wall actually moves.
+
+---
+
+## EXP-009 — Stage 4C: sliding-window attention (W=256) — does it move the TRAINING wall?
+### Dual acceptance (pre-registered)
+(1) local semantics; (2) material systems improvement vs the EXP-008 dense curve. BOTH required.
+### Result
+(1) **Semantics: PASS** — tests prove T≤W equals causal, and a 1-layer token >W back cannot affect output.
+(2) **Systems: FAIL** — identical model/batch, only `attn_type` changed. Peak memory per T (sliding vs dense):
+512 1202/1169 · 1024 2243/2243 · 2048 5036/5002 · **4096 15,740/16,277 MB** — essentially unchanged (≤3%).
+The T=4096 training wall did **not** move (still ~16 GB → still saturates the machine). Throughput at 4096
+was less brutal (4,694 vs 265 tok/s) but still deep in the swap regime (vs 23k at 2048).
+### Observation
+Confirms the band-mask trap AND, more importantly, **the wall is activation-dominated, not
+attention-score-dominated.** SDPA (flash) already avoided materializing the O(T²) score matrix in the
+dense case, so there was little attention memory for a window to save; the memory is the per-layer
+activations (Q/K/V, FFN, residuals = O(T·d)·layers), which sliding-window does NOT reduce.
+### Decision
+**Sliding-window REVERT as a memory fix** (it does not solve the training wall). Keep it available
+(valid local semantics; marginally faster at long T) behind `attn_type: sliding`. The correct next
+intervention for an activation-dominated wall is **activation checkpointing** (recompute activations in
+backward instead of storing them) — EXP-011. (Two "didn't help" results, MoE + sliding — both are real,
+and both correctly narrowed the diagnosis.)
+### Next
+EXP-011 (activation checkpointing) to actually move the training-memory wall; and/or EXP-010 (KV cache)
+to move the separate decode-latency wall. Both are likely wins.

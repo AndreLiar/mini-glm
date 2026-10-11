@@ -76,3 +76,14 @@ the T×T matrix) but grows **non-linearly** (sharp ×3.25 jump 2048→4096); cau
 wall is a point in {params, batch, T, precision, layers, width, optimizer, backend}. Two independent
 problems: (A) training memory → sliding-window / **activation checkpointing**; (B) decode latency → **KV
 cache**. Stay local (Phase B); cloud only if a required experiment proves unanswerable here.
+
+## EXP-009 — sliding-window (W=256) vs dense, same model/batch (training fwd+bwd)
+| T | dense tok/s | dense MB | sliding tok/s | sliding MB |
+|---:|---:|---:|---:|---:|
+| 2048 | 23,291 | 5002 | 23,315 | 5036 |
+| 4096 | 265 | 16,277 | 4,694 | 15,740 |
+
+**Finding:** sliding-window did NOT move the training-memory wall (per-T memory ≤3% different; 4096 still
+~16 GB). The wall is **activation-dominated** (per-layer Q/K/V/FFN/residual activations = O(T·d)·layers),
+not attention-score-dominated — SDPA already avoided the O(T²) score matrix, so a window had little to
+save. Correct next step: **activation checkpointing** (EXP-011), not more attention tricks.

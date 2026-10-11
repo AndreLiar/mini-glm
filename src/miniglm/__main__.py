@@ -373,7 +373,7 @@ def cmd_scaling(args) -> None:
             logger.info(f"T={T:5d} | FAIL {type(e).__name__}: {e}")
             break
 
-    record = {"experiment": "stage4_scaling", **prov, "config": config.to_dict(),
+    record = {"experiment": config.experiment, **prov, "config": config.to_dict(),
               "device": str(device), "hardware": hardware_info(), "batch": BATCH, "curve": results}
     path = write_experiment(record)
     logger.info(f"DONE -> {path}")
