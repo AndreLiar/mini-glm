@@ -87,3 +87,15 @@ cache**. Stay local (Phase B); cloud only if a required experiment proves unansw
 ~16 GB). The wall is **activation-dominated** (per-layer Q/K/V/FFN/residual activations = O(T·d)·layers),
 not attention-score-dominated — SDPA already avoided the O(T²) score matrix, so a window had little to
 save. Correct next step: **activation checkpointing** (EXP-011), not more attention tricks.
+
+## EXP-011 — activation checkpointing vs dense (training fwd+bwd, same model/batch)
+| T | OFF tok/s | OFF MB | ON tok/s | ON MB | mem saved |
+|---:|---:|---:|---:|---:|---:|
+| 2048 | 23,291 | 5002 | 16,278 | 2796 | 44% |
+| 4096 | 265 | 16,277 | 7,400 | 8,769 | 46% |
+
+**WIN (hypothesis confirmed):** checkpointing cut peak training memory ~44–48% → saved activations were
+a major part of the wall. **T=4096 moved from unusable (265 tok/s, swap) to 7,400 tok/s at 8.8 GB.**
+Non-obvious lesson: at 4096, doing MORE compute (recompute) is ~28× FASTER because it escapes swap. At
+small T (no pressure) it's ~25–30% slower — regime-dependent, so KEEP only for long-context training.
+The hardware ceiling moved: 4096 now trains with headroom. Still Phase B (local).

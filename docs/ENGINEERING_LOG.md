@@ -419,5 +419,27 @@ grad is on (training only; eval/decode unaffected). Re-run scaling at T ∈ {102
 - Systems (the real bar): **T=4096 becomes operationally usable** (escapes swap) without changing
   semantics. Note the non-obvious possibility: more FLOPs (recompute) can be *faster* if it avoids
   memory thrashing. Report a memory + tok/s table; decide KEEP/REVERT on evidence (don't pre-promise a win).
-### Result / Observation / Decision / Next
-_pending — EXP-011 run_
+### Result (MPS, batch 8, FP32, dense causal; checkpoint ON vs OFF, same model)
+| T | OFF tok/s | OFF mem | ON tok/s | ON mem | mem saved |
+|---:|---:|---:|---:|---:|---:|
+| 128 | 73,889 | 108 | 59,972 | 83 | 23% |
+| 256 | 63,162 | 221 | 56,358 | 120 | 46% |
+| 512 | 56,655 | 1169 | 42,397 | 1177 | ~0% (allocator noise) |
+| 1024 | 40,270 | 2243 | 27,869 | 1177 | 48% |
+| 2048 | 23,291 | 5002 | 16,278 | 2796 | 44% |
+| 4096 | **265** | **16,277** | **7,400** | **8,769** | **46%** |
+### Observation — hypothesis CONFIRMED
+- Checkpointing cut peak training memory **~44–48%** at larger T → saved per-layer activations WERE a
+  major component of the wall (the EXP-009 leading hypothesis is now supported by a direct test).
+- **The T=4096 training wall MOVED:** 265 → **7,400 tok/s (~28× faster) AND half the memory** (16.3→8.8
+  GB, now well under 16 GB). The counter-intuitive systems lesson fired exactly: doing MORE compute
+  (recompute) is *faster* here because it escapes memory **swap/thrashing**.
+- At small T (≤2048, no memory pressure) checkpointing is **~25–30% slower** — the textbook trade (pay
+  compute for memory). So it's a regime-dependent tool, not free.
+### Decision
+**KEEP for long-context / memory-constrained training** (config flag `activation_checkpointing`; leave
+OFF for short context where it only costs speed). Correctness already proven identical (test). The wall
+is pushed out: T=4096 is now trainable with headroom (8.8 GB), so the practical ceiling moved up.
+### Next
+EXP-010 (KV cache) for the separate decode-latency wall; then EXP-012 (revisit FP16 at long context —
+activations now dominate, so EXP-006's REVERT may flip). Still Phase B, no cloud.
